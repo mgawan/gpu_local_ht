@@ -6,7 +6,6 @@
 #include <cstring>
 #include "helper.hpp"
 #include "kernel.hpp"
-#define HT_SIZE 300
 #define TOT_THREADS 1
 #define KMER_SZ 10
 
@@ -27,6 +26,7 @@ int main (int argc, char* argv[]){
     CUDA_CHECK(cudaMalloc(&d_offset_arr, sizeof(int)*contigs.size()));
     //memory allocation on device for local hashtables
     CUDA_CHECK(cudaMalloc(&d_ht, sizeof(loc_ht)*HT_SIZE*TOT_THREADS));
+
 
     //convert strings to char* and prepare offset array
     for(int i = 0; i < contigs.size(); i++)
