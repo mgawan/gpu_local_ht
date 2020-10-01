@@ -7,7 +7,7 @@
 #include <typeinfo>
 #include <random>
 #include <algorithm>
-#include "gpu_loc_ht.cpp"
+#include <cstring>
 
 #define CUDA_CHECK(ans)                                                                  \
     {                                                                                    \
@@ -35,8 +35,11 @@ void print_vals(T val);
 template<typename T, typename... Types>
 void print_vals(T val, Types... val_);
 
+__global__ void ht_kernel(int x, int y){
+    return;
+}
 
-int main (int argc, char argv*[]){
+int main (int argc, char* argv[]){
     std::string in_file = argv[1];
     int max_ctg_size;
     std::vector<std::string> contigs = read_fasta(in_file, max_ctg_size);
@@ -45,21 +48,24 @@ int main (int argc, char argv*[]){
     int offset_sum = 0;
     //allocate memory for host and device char arrays
     h_contigs = new char[max_ctg_size*contigs.size()];
-    CUDA_CHECK(cudaMalloc(d_contigs, sizeof(char)*max_ctg_size*contigs.size()));
+    CUDA_CHECK(cudaMalloc(&d_contigs, sizeof(char)*max_ctg_size*contigs.size()));
     //memory for offset array
-    h_offset_arr  = new [contigs.size()];
-    CUDA_CHECK(cudaMalloc(d_offset_arr, sizeof(char)*contigs.size()));
+    h_offset_arr  = new int[contigs.size()];
+    CUDA_CHECK(cudaMalloc(&d_offset_arr, sizeof(char)*contigs.size()));
 
     //convert strings to char* and prepare offset array
     for(int i = 0; i < contigs.size(); i++)
     {
-        char* seq_ptr = h_offset_arr + offset_sum;
+        char* seq_ptr = h_contigs + offset_sum;
         memcpy(seq_ptr, contigs[i].c_str(), contigs[i].size());
         offset_sum += contigs[i].size();
         h_offset_arr[i] = offset_sum;
     }
+    //moving data to device
+    CUDA_CHECK(cudaMemcpy(d_contigs, h_contigs, sizeof(char)*offset_sum, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_offset_arr, h_offset_arr, sizeof(int)*contigs.size(), cudaMemcpyHostToDevice));
 
-    CUDA_CHECK(cudaMemcpy(d_contigs, h_offset_arr, sizeof(char)*offset_sum, cudaMemcpyHostToDevice));
+    ht_kernel<<<1,1>>>(1,1);
 
     return 0;
 }
