@@ -44,5 +44,13 @@ int main (int argc, char* argv[]){
 
     CUDA_CHECK(cudaFree(d_ht));
 
+    std::unordered_map<std::string, int> my_map;
+
+    my_map.insert({"this_map",10});
+    my_map.insert({"map",100});
+    my_map.insert({"this_map", 15});
+    print_vals("total_insertions:", "count");
+   // print_vals(my_map["this_map"], my_map["map"]);
+
     return 0;
 }
