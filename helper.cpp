@@ -1,4 +1,4 @@
-#include"helper.hpp"
+#include "helper.hpp"
 
 std::vector<std::string> read_fasta(std::string in_file, int &largest){
     std::ifstream in_stream(in_file);

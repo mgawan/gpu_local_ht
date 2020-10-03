@@ -7,7 +7,7 @@
 #include "helper.hpp"
 #include "kernel.hpp"
 #define TOT_THREADS 1
-#define KMER_SZ 10
+#define KMER_SZ 4
 
 
 int main (int argc, char* argv[]){
@@ -39,8 +39,10 @@ int main (int argc, char* argv[]){
     //moving data to device
     CUDA_CHECK(cudaMemcpy(d_contigs, h_contigs, sizeof(char)*max_ctg_size*contigs.size(), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_offset_arr, h_offset_arr, sizeof(int)*contigs.size(), cudaMemcpyHostToDevice));
-
+    //print_vals("launch kernel", "another print");
     ht_kernel<<<1,1>>>(d_ht, d_contigs, d_offset_arr, KMER_SZ);
+
+    CUDA_CHECK(cudaFree(d_ht));
 
     return 0;
 }
