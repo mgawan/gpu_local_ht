@@ -11,7 +11,15 @@ struct cstr_type{
     }
 
     __device__ bool operator==(const cstr_type& in2){
-        return ((start_ptr == in2.start_ptr) && (length == in2.length));
+        bool str_eq = true;
+        if(length != EMPTY && in2.length != EMPTY)
+            for(int i = 0; i < in2.length; i++){
+                if(start_ptr[i] != in2.start_ptr[i]){
+                    str_eq = false;
+                    break;
+                }
+            }
+        return (str_eq && (length == in2.length));
     }
 };
 
