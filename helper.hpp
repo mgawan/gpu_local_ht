@@ -20,6 +20,7 @@ gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
 }
 
 std::vector<std::string> read_fasta(std::string in_file, int &largest);
+void read_locassm_data(int* data);
 //templated functions needs to be in the same translation unit
 template<typename T>
 void print_log(T _log){
