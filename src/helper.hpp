@@ -61,5 +61,5 @@ void print_vals(T val, Types... val_){
         }
 }
 
-int32_t print_loc_data(std::vector<CtgWithReads> *data_in);
+void print_loc_data(std::vector<CtgWithReads> *data_in);
 

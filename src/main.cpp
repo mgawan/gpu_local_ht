@@ -32,7 +32,22 @@ int main (int argc, char* argv[]){
     //device allocations for loc_assm_data
     int32_t *cid_d, *ctg_seq_offsets_d, *reads_l_offset_d, *reads_r_offset_d; 
     int32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d;
-    char *ctg_seqs_d, *reads_left_d, reads_right_d, 
+    char *ctg_seqs_d, *reads_left_d, *reads_right_d;
+    double *depth_d;
+
+    CUDA_CHECK(cudaMalloc(&cid_d, sizeof(int32_t) * vec_size));
+    CUDA_CHECK(cudaMalloc(&ctg_seq_offsets_d, sizeof(int32_t) * vec_size));
+    CUDA_CHECK(cudaMalloc(&reads_l_offset_d, sizeof(int32_t) * total_l_reads));
+    CUDA_CHECK(cudaMalloc(&reads_r_offset_d, sizeof(int32_t) * total_r_reads));
+    CUDA_CHECK(cudaMalloc(&rds_l_cnt_offset_d, sizeof(int32_t) * vec_size));
+    CUDA_CHECK(cudaMalloc(&rds_r_cnt_offset_d, sizeof(int32_t) * vec_size));
+    CUDA_CHECK(cudaMalloc(&ctg_seqs_d, sizeof(char) * max_ctg_size * vec_size));
+    CUDA_CHECK(cudaMalloc(&reads_left_d, sizeof(char) * total_l_reads * max_read_size));
+    CUDA_CHECK(cudaMalloc(&reads_right_d, sizeof(char) * total_r_reads * max_read_size));
+    CUDA_CHECK(cudaMalloc(&depth_d, sizeof(double) * vec_size));
+    
+    
+    
 
 
 
