@@ -16,7 +16,6 @@ int main (int argc, char* argv[]){
     int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size;
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size);
     int32_t vec_size = data_in.size();
-    print_loc_data(&data_in);
 
     //host allocations for converting loc_assm_data to prim types
     int32_t *cid_h = new int32_t[vec_size];
@@ -84,7 +83,7 @@ int main (int argc, char* argv[]){
 
         for(int j = 0; j < temp_data.reads_right.size(); j++){
             char *reads_r_ptr = reads_right_h + reads_r_offset_sum;
-            char *quals_l_ptr = quals_right_h + reads_r_offset_sum;
+            char *quals_r_ptr = quals_right_h + reads_r_offset_sum;
             memcpy(reads_r_ptr, temp_data.reads_right[j].seq.c_str(), temp_data.reads_right[j].seq.size());
             //quals offsets will be same as reads offset because quals and reads have same length
             memcpy(quals_r_ptr, temp_data.reads_right[j].quals.c_str(), temp_data.reads_right[j].quals.size());
@@ -93,10 +92,7 @@ int main (int argc, char* argv[]){
             read_r_index++;
         }
         rds_r_cnt_offset_h[i] = read_r_index; // running sum of right reads count
-
-
-
-    }
+    }// data conversion for loop ends
 
     
     
