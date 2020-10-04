@@ -12,17 +12,32 @@
 
 int main (int argc, char* argv[]){
     std::string in_file = argv[1];
-    int max_ctg_size;
     std::vector<CtgWithReads> data_in;
-    char *d_contigs, *h_contigs;
-    int *h_offset_arr, *d_offset_arr;
-    loc_ht *d_ht;
-    int offset_sum = 0;
+    int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size;
+    read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size);
+    int32_t vec_size = data_in.size();
+
+    //host allocations for converting loc_assm_data to prim types
+    int32_t *cid_h = new int32_t[vec_size];
+    char *ctg_seqs_h = new char[max_ctg_size * vec_size];
+    int32_t *ctg_seq_offsets_h = new int32_t[vec_size];
+    double *depth_h = new double[vec_size];
+    char *reads_left_h = new char[total_l_reads * max_read_size];
+    char *reads_right_h = new char[total_r_reads * max_read_size];
+    int32_t *reads_l_offset_h = new int32_t[total_l_reads];
+    int32_t *reads_r_offset_h = new int32_t[total_r_reads];
+    int32_t *rds_l_cnt_offset_h = new int32_t[vec_size];
+    int32_t *rds_r_cnt_offset_h = new int32_t[vec_size];
+
+    //device allocations for loc_assm_data
+    int32_t *cid_d, *ctg_seq_offsets_d, *reads_l_offset_d, *reads_r_offset_d; 
+    int32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d;
+    char *ctg_seqs_d, *reads_left_d, reads_right_d, 
 
 
-    read_locassm_data(&data_in, in_file);
-    print_vals(data_in.size());
-    print_loc_data(&data_in);
+
+    return 0;
+}
 
 
     // //allocate memory for host and device char arrays
@@ -58,6 +73,3 @@ int main (int argc, char* argv[]){
     // my_map.insert({"this_map", 15});
     // print_vals("total_insertions:", "count");
    // print_vals(my_map["this_map"], my_map["map"]);
-
-    return 0;
-}

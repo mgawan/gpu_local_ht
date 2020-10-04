@@ -25,9 +25,11 @@ std::vector<std::string> read_fasta(std::string in_file, int &largest){
     return in_sequences;
 }
 
-void read_locassm_data(std::vector<CtgWithReads> *data_in, std::string fname){
+void read_locassm_data(std::vector<CtgWithReads> *data_in, std::string fname, 
+int32_t& max_ctg_size, int32_t& total_r_reads, int32_t& total_l_reads, int32_t& max_read_size){
     std::ifstream f(fname);
     std::string line;
+    max_ctg_size = 0, total_l_reads = 0, total_r_reads = 0, max_read_size = 0;
     //ctgs_map->clear();
     while(getline(f, line)) {
       std::stringstream ss(line);
@@ -35,14 +37,22 @@ void read_locassm_data(std::vector<CtgWithReads> *data_in, std::string fname){
       int lsize = 0, rsize = 0;
       //CtgWithReads ctg_with_reads;
       ss >> temp_in.cid >> temp_in.seq >> temp_in.depth >> lsize >> rsize;
+      total_l_reads += lsize;
+      total_r_reads += rsize;
+      if (temp_in.seq.size() > max_ctg_size)
+          max_ctg_size = temp_in.seq.size();
       for (int i = 0; i < lsize; i++) {
         ReadSeq read_seq;
         ss >> read_seq.read_id >> read_seq.seq >> read_seq.quals;
+        if(read_seq.seq.size() > max_read_size)
+          max_read_size = read_seq.seq.size();
         temp_in.reads_left.push_back(read_seq);
       }
       for (int i = 0; i < rsize; i++) {
         ReadSeq read_seq;
         ss >> read_seq.read_id >> read_seq.seq >> read_seq.quals;
+        if(read_seq.seq.size() > max_read_size)
+          max_read_size = read_seq.seq.size();
         temp_in.reads_right.push_back(read_seq);
       }
       //ctgs_map->insert({ctg_with_reads.cid, ctg_with_reads});
