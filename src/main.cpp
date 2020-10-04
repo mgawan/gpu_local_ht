@@ -25,15 +25,19 @@ int main (int argc, char* argv[]){
     double *depth_h = new double[vec_size];
     char *reads_left_h = new char[total_l_reads * max_read_size];
     char *reads_right_h = new char[total_r_reads * max_read_size];
+    char *quals_right_h = new char[total_r_reads * max_read_size];
+    char *quals_left_h = new char[total_l_reads * max_read_size];
     int32_t *reads_l_offset_h = new int32_t[total_l_reads];
     int32_t *reads_r_offset_h = new int32_t[total_r_reads];
     int32_t *rds_l_cnt_offset_h = new int32_t[vec_size];
     int32_t *rds_r_cnt_offset_h = new int32_t[vec_size];
+    int32_t *quals_l_offset_h = new int32_t[total_l_reads];
+    int32_t *quals_r_offset_h = new int32_t[total_r_reads];
 
     //device allocations for loc_assm_data
     int32_t *cid_d, *ctg_seq_offsets_d, *reads_l_offset_d, *reads_r_offset_d; 
-    int32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d;
-    char *ctg_seqs_d, *reads_left_d, *reads_right_d;
+    int32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d, *quals_l_offset_d, *quals_r_offset_d;
+    char *ctg_seqs_d, *reads_left_d, *reads_right_d, *quals_left_d, *quals_right_d;
     double *depth_d;
 
     CUDA_CHECK(cudaMalloc(&cid_d, sizeof(int32_t) * vec_size));
@@ -46,6 +50,10 @@ int main (int argc, char* argv[]){
     CUDA_CHECK(cudaMalloc(&reads_left_d, sizeof(char) * total_l_reads * max_read_size));
     CUDA_CHECK(cudaMalloc(&reads_right_d, sizeof(char) * total_r_reads * max_read_size));
     CUDA_CHECK(cudaMalloc(&depth_d, sizeof(double) * vec_size));
+    CUDA_CHECK(cudaMalloc(&quals_right_d, sizeof(char) * total_r_reads * max_read_size));
+    CUDA_CHECK(cudaMalloc(&quals_left_d, sizeof(char) * total_l_reads * max_read_size));
+
+
 
     //convert the loc_assem data to primitive structures for device
     int32_t ctgs_offset_sum = 0;
@@ -64,7 +72,10 @@ int main (int argc, char* argv[]){
 
         for(int j = 0; j < temp_data.reads_left.size(); j++){
             char *reads_l_ptr = reads_left_h + reads_l_offset_sum;
+            char *quals_l_ptr = quals_left_h + reads_l_offset_sum;
             memcpy(reads_l_ptr, temp_data.reads_left[j].seq.c_str(), temp_data.reads_left[j].seq.size());
+            //quals offsets will be same as reads offset because quals and reads have same length
+            memcpy(quals_l_ptr, temp_data.reads_left[j].quals.c_str(), temp_data.reads_left[j].quals.size());
             reads_l_offset_sum += temp_data.reads_left[j].seq.size();
             reads_l_offset_h[read_l_index] = reads_l_offset_sum;
             read_l_index++;
@@ -73,7 +84,10 @@ int main (int argc, char* argv[]){
 
         for(int j = 0; j < temp_data.reads_right.size(); j++){
             char *reads_r_ptr = reads_right_h + reads_r_offset_sum;
+            char *quals_l_ptr = quals_right_h + reads_r_offset_sum;
             memcpy(reads_r_ptr, temp_data.reads_right[j].seq.c_str(), temp_data.reads_right[j].seq.size());
+            //quals offsets will be same as reads offset because quals and reads have same length
+            memcpy(quals_r_ptr, temp_data.reads_right[j].quals.c_str(), temp_data.reads_right[j].quals.size());
             reads_r_offset_sum += temp_data.reads_right[j].seq.size();
             reads_r_offset_h[read_r_index] = reads_r_offset_sum;
             read_r_index++;
