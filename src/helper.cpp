@@ -1,20 +1,5 @@
 #include "helper.hpp"
 
-struct CtgWithReads {
-  int32_t cid;
-  std::string seq;
-  double depth;
-  std::vector<ReadSeq> reads_left;
-  std::vector<ReadSeq> reads_right;
-};
-
-struct ReadSeq {
-  std::string read_id;
-  std::string seq;
-  std::string quals;
-};
-
-
 std::vector<std::string> read_fasta(std::string in_file, int &largest){
     std::ifstream in_stream(in_file);
     std::string in_line;
@@ -40,26 +25,44 @@ std::vector<std::string> read_fasta(std::string in_file, int &largest){
     return in_sequences;
 }
 
-void read_locassm_data(vector<CtgWithReads> &data_in, string fname){
+void read_locassm_data(std::vector<CtgWithReads> *data_in, std::string fname){
     std::ifstream f(fname);
     std::string line;
-    ctgs_map->clear();
+    //ctgs_map->clear();
     while(getline(f, line)) {
       std::stringstream ss(line);
+      CtgWithReads temp_in;
       int lsize = 0, rsize = 0;
       //CtgWithReads ctg_with_reads;
-      ss >> data_in.cid >> data_in.seq >> data_in.depth >> lsize >> rsize;
+      ss >> temp_in.cid >> temp_in.seq >> temp_in.depth >> lsize >> rsize;
       for (int i = 0; i < lsize; i++) {
         ReadSeq read_seq;
         ss >> read_seq.read_id >> read_seq.seq >> read_seq.quals;
-        data_in.reads_left.push_back(read_seq);
+        temp_in.reads_left.push_back(read_seq);
       }
       for (int i = 0; i < rsize; i++) {
         ReadSeq read_seq;
         ss >> read_seq.read_id >> read_seq.seq >> read_seq.quals;
-        data_in.reads_right.push_back(read_seq);
+        temp_in.reads_right.push_back(read_seq);
       }
       //ctgs_map->insert({ctg_with_reads.cid, ctg_with_reads});
+      data_in->push_back(temp_in);
+    }
+  }
+
+  void print_loc_data(std::vector<CtgWithReads> *data_in){
+        for(int i = 0; i < 7; i++){
+        print_vals("contig_id: ", (*data_in)[i].cid, "\n seq: ", (*data_in)[i].seq, "\n depth: ", (*data_in)[i].depth, "\n right: ", (*data_in)[i].reads_left.size(), "\n left: ",(*data_in)[i].reads_right.size());
+        print_vals("**READS**");
+        for(int j = 0; j< (*data_in)[i].reads_left.size(); j++){
+            ReadSeq read = (*data_in)[i].reads_left[j];
+            print_vals(read.read_id, " ", read.seq, " ", read.quals);
+        }
+        for(int j = 0; j< (*data_in)[i].reads_right.size(); j++){
+            ReadSeq read = (*data_in)[i].reads_right[j];
+            print_vals(read.read_id, " ", read.seq, " ", read.quals);
+        }
+
     }
   }
 

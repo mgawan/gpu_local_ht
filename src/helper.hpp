@@ -3,6 +3,7 @@
 #include <vector>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 #define CUDA_CHECK(ans)                                                                  \
     {                                                                                    \
@@ -19,8 +20,25 @@ gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
     }
 }
 
+struct ReadSeq {
+  std::string read_id;
+  std::string seq;
+  std::string quals;
+};
+
+struct CtgWithReads {
+  int32_t cid;
+  std::string seq;
+  double depth;
+  std::vector<ReadSeq> reads_left;
+  std::vector<ReadSeq> reads_right;
+};
+
+
+
+
 std::vector<std::string> read_fasta(std::string in_file, int &largest);
-void read_locassm_data(int* data);
+void read_locassm_data(std::vector<CtgWithReads> *data_in, std::string fname);
 //templated functions needs to be in the same translation unit
 template<typename T>
 void print_log(T _log){
@@ -41,4 +59,6 @@ void print_vals(T val, Types... val_){
         print_vals(val_...);
         }
 }
+
+void print_loc_data(std::vector<CtgWithReads> *data_in);
 
