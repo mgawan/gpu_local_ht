@@ -61,16 +61,18 @@ int32_t& max_ctg_size, int32_t& total_r_reads, int32_t& total_l_reads, int32_t& 
   }
 
   void print_loc_data(std::vector<CtgWithReads> *data_in){
-        for(int i = 0; i < 7; i++){
+        for(int i = 0; i < 100; i++){
         print_vals("contig_id: ", (*data_in)[i].cid, "\n seq: ", (*data_in)[i].seq, "\n depth: ", (*data_in)[i].depth, "\n right: ", (*data_in)[i].reads_left.size(), "\n left: ",(*data_in)[i].reads_right.size());
         print_vals("**READS**");
         for(int j = 0; j< (*data_in)[i].reads_left.size(); j++){
             ReadSeq read = (*data_in)[i].reads_left[j];
             print_vals(read.read_id, " ", read.seq, " ", read.quals);
+            print_vals("READ_SIZE:", read.seq.size(), "QUALS_SIZE:", read.quals.size());
         }
         for(int j = 0; j< (*data_in)[i].reads_right.size(); j++){
             ReadSeq read = (*data_in)[i].reads_right[j];
             print_vals(read.read_id, " ", read.seq, " ", read.quals);
+            print_vals("READ_SIZE:", read.seq.size(), "QUALS_SIZE:", read.quals.size());
         }
 
     }
