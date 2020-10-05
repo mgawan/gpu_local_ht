@@ -32,12 +32,14 @@ int main (int argc, char* argv[]){
     int32_t *rds_r_cnt_offset_h = new int32_t[vec_size];
     int32_t *quals_l_offset_h = new int32_t[total_l_reads];
     int32_t *quals_r_offset_h = new int32_t[total_r_reads];
+    int64_t *term_counts_h = new int64_t[3];
 
     //device allocations for loc_assm_data
     int32_t *cid_d, *ctg_seq_offsets_d, *reads_l_offset_d, *reads_r_offset_d; 
-    int32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d, *quals_l_offset_d, *quals_r_offset_d;
+    int32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d;
     char *ctg_seqs_d, *reads_left_d, *reads_right_d, *quals_left_d, *quals_right_d;
     double *depth_d;
+    int64_t *term_counts_d;
 
     CUDA_CHECK(cudaMalloc(&cid_d, sizeof(int32_t) * vec_size));
     CUDA_CHECK(cudaMalloc(&ctg_seq_offsets_d, sizeof(int32_t) * vec_size));
@@ -51,6 +53,7 @@ int main (int argc, char* argv[]){
     CUDA_CHECK(cudaMalloc(&depth_d, sizeof(double) * vec_size));
     CUDA_CHECK(cudaMalloc(&quals_right_d, sizeof(char) * total_r_reads * max_read_size));
     CUDA_CHECK(cudaMalloc(&quals_left_d, sizeof(char) * total_l_reads * max_read_size));
+    CUDA_CHECK(cudaMalloc(&term_counts_d, sizeof(int64_t)*3));
 
 
 
@@ -94,7 +97,29 @@ int main (int argc, char* argv[]){
         rds_r_cnt_offset_h[i] = read_r_index; // running sum of right reads count
     }// data conversion for loop ends
 
-    
+    for(int i = 0; i < 3; i++){
+        term_counts_h[i] = 0;
+    }
+
+    //move the data to device
+    CUDA_CHECK(cudaMemcpy(cid_d, cid_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(ctg_seq_offsets_d, ctg_seq_offsets_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(reads_l_offset_d, reads_l_offset_h, sizeof(int32_t) * total_l_reads, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(reads_r_offset_d, reads_r_offset_d, sizeof(int32_t) * total_r_reads, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(rds_l_cnt_offset_d, rds_l_cnt_offset_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(rds_r_cnt_offset_d, rds_r_cnt_offset_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(ctg_seqs_d, ctg_seqs_h, sizeof(char) * max_ctg_size * vec_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(reads_left_d, reads_left_h, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(reads_right_d, reads_right_h, sizeof(char) * total_r_reads * max_read_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(depth_d, depth_h, sizeof(double) * vec_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(quals_right_d, quals_right_h, sizeof(char) * total_r_reads * max_read_size, cudaMemcpy));
+    CUDA_CHECK(cudaMemcpy(quals_left_d, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(term_counts_d, term_counts_h, sizeof(int64_t)*3, cudaMemcpyHostToDevice));
+
+    //call kernel here, one thread per contig
+    unsigned total_threads = vec_size;
+    //free up the memory
+
     
     
 

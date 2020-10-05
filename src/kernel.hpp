@@ -32,3 +32,6 @@ __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, cstr_type ctg_v
 __device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key);
 __device__ cstr_type ht_get(loc_ht* thread_ht, cstr_type kmer_key);
 __device__ unsigned hash_func(cstr_type key);
+__global__ void iterative_walks_kernel(uint32_t* cid, char *contigs, uint32_t* ctg_depth, char* reads_seqs, int max_mer_len, int kmer_len,
+                                      int qual_offset, int walk_len_limit, int64_t *term_counts,
+                                      int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int64_t excess_reads);

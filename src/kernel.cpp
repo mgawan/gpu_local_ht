@@ -106,12 +106,6 @@ __device__ cstr_type ht_get(loc_ht* thread_ht, cstr_type kmer_key){
             printf("key found, returning\n");
             return thread_ht[hash_val].val;
         }
-        // if(thread_ht[hash_val].key.length == EMPTY){
-
-        //     printf("empty key found, returning\n");
-        //     return thread_ht[hash_val].val;
-        // }
-
         hash_val = (hash_val +1 ) %HT_SIZE;//hash_val = (hash_val + 1) & (HT_SIZE -1);
         if(hash_val == orig_hash){
             printf("end reached\n");
@@ -119,5 +113,36 @@ __device__ cstr_type ht_get(loc_ht* thread_ht, cstr_type kmer_key){
             
             }
     }
+
+}
+
+
+__global__ void iterative_walks_kernel(uint32_t* cid, uint32_t* ctg_offsets, char* contigs, 
+char* reads_l, char* reads_r, char* reads_l_offset, char reads_r_offset, char* rds_count_l, char* rds_count_r, uint32_t* ctg_depth, char* reads_seqs, 
+int max_mer_len, int kmer_len, int qual_offset, int walk_len_limit, int64_t *term_counts,
+int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int64_t excess_reads){
+    unsigned idx = threadIdx.x + blockIdx.x * blockDimx.x;
+    cstr_type loc_ctg;
+    char *loc_r_reads, *loc_l_reads;
+    uint32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
+
+
+    if(idx == 0){
+        loc_ctg.start_ptr = contigs;
+        loc_ctg.length = ctg_offsets[idx];
+        r_rds_cnt = rds_count_r[idx];
+        l_rds_cnt = rds_count_l[idx];
+        loc_r_reads = reads_r;
+        loc_l_reads = reads_l;
+    }else{
+        loc_ctg.start_ptr = contigs + ctg_offsets[idx-1];
+        loc_ctg.length = ctg_offsets[idx] - ctg_offsets[idx - 1];
+        r_rds_cnt = rds_count_r[idx] - rds_count_r[idx - 1];
+        l_rds_cnt = rds_count_l[idx] - rds_count_l[idx - 1];
+        loc_r_reads = reads_r + reads_r_offset[reads_count_r[idx - 1]];
+        loc_l_reads = reads_l + reads_l_offset[reads_count_l[idx - 1]];
+    }
+
+    if(b)
 
 }
