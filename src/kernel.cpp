@@ -143,6 +143,4 @@ int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int64_t excess_reads){
         loc_l_reads = reads_l + reads_l_offset[reads_count_l[idx - 1]];
     }
 
-    if(b)
-
 }
