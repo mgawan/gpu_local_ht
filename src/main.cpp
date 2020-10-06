@@ -13,9 +13,10 @@
 int main (int argc, char* argv[]){
     std::string in_file = argv[1];
     std::vector<CtgWithReads> data_in;
-    int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size;
-    read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size);
+    int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
+    read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size,max_r_count, max_l_count);
     int32_t vec_size = data_in.size();
+    print_vals("max_lcount:",max_l_count,"max_r_count:", max_r_count);
 
     //host allocations for converting loc_assm_data to prim types
     int32_t *cid_h = new int32_t[vec_size];
@@ -112,8 +113,8 @@ int main (int argc, char* argv[]){
     CUDA_CHECK(cudaMemcpy(reads_left_d, reads_left_h, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(reads_right_d, reads_right_h, sizeof(char) * total_r_reads * max_read_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(depth_d, depth_h, sizeof(double) * vec_size, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(quals_right_d, quals_right_h, sizeof(char) * total_r_reads * max_read_size, cudaMemcpy));
-    CUDA_CHECK(cudaMemcpy(quals_left_d, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(quals_right_d, quals_right_h, sizeof(char) * total_r_reads * max_read_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(quals_left_d, quals_left_h, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(term_counts_d, term_counts_h, sizeof(int64_t)*3, cudaMemcpyHostToDevice));
 
     //call kernel here, one thread per contig

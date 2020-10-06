@@ -26,11 +26,10 @@ std::vector<std::string> read_fasta(std::string in_file, int &largest){
 }
 
 void read_locassm_data(std::vector<CtgWithReads> *data_in, std::string fname, 
-int32_t& max_ctg_size, int32_t& total_r_reads, int32_t& total_l_reads, int32_t& max_read_size){
+int32_t& max_ctg_size, int32_t& total_r_reads, int32_t& total_l_reads, int32_t& max_read_size, int32_t& max_r_count, int32_t& max_l_count){
     std::ifstream f(fname);
     std::string line;
-    max_ctg_size = 0, total_l_reads = 0, total_r_reads = 0, max_read_size = 0;
-    //ctgs_map->clear();
+    max_ctg_size = 0, total_l_reads = 0, total_r_reads = 0, max_read_size = 0, max_read_size = 0, max_l_count = 0;
     while(getline(f, line)) {
       std::stringstream ss(line);
       CtgWithReads temp_in;
@@ -39,6 +38,10 @@ int32_t& max_ctg_size, int32_t& total_r_reads, int32_t& total_l_reads, int32_t& 
       ss >> temp_in.cid >> temp_in.seq >> temp_in.depth >> lsize >> rsize;
       total_l_reads += lsize;
       total_r_reads += rsize;
+      if(max_r_count < rsize)
+        max_r_count = rsize;
+      if(max_l_count < lsize)
+        max_l_count = lsize;
       if (temp_in.seq.size() > max_ctg_size)
           max_ctg_size = temp_in.seq.size();
       for (int i = 0; i < lsize; i++) {

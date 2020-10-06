@@ -117,6 +117,7 @@ __device__ cstr_type ht_get(loc_ht* thread_ht, cstr_type kmer_key){
 }
 
 
+//same kernel will be used for right and left walks
 __global__ void iterative_walks_kernel(uint32_t* cid, uint32_t* ctg_offsets, char* contigs, 
 char* reads_l, char* reads_r, char* reads_l_offset, char reads_r_offset, char* rds_count_l, char* rds_count_r, uint32_t* ctg_depth, char* reads_seqs, 
 int max_mer_len, int kmer_len, int qual_offset, int walk_len_limit, int64_t *term_counts,
@@ -125,6 +126,8 @@ int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int64_t excess_reads){
     cstr_type loc_ctg;
     char *loc_r_reads, *loc_l_reads;
     uint32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
+    //TODO: add device memory for MerMap hashtable using the previous loc_ht implementation
+    loc_ht* loc_mer_map;
 
 
     if(idx == 0){
@@ -141,6 +144,11 @@ int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int64_t excess_reads){
         l_rds_cnt = rds_count_l[idx] - rds_count_l[idx - 1];
         loc_r_reads = reads_r + reads_r_offset[reads_count_r[idx - 1]];
         loc_l_reads = reads_l + reads_l_offset[reads_count_l[idx - 1]];
+    }
+
+    //main for loop
+    for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
+
     }
 
 }
