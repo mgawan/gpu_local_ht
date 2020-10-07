@@ -134,6 +134,32 @@ struct MerFreqs {
     }
   };
 
+
+    __device__
+    void comp_merbase(MerBase& elem1, MerBase& elem2){
+        if(elem1.rating != elem2.rating)
+            return elem1.rating > elem2.rating;
+        if (elem1.nvotes_hi_q != elem2.nvotes_hi_q)
+            return elem1.nvotes_hi_q > elem2.nvotes_hi_q;
+        if (elem1.nvotes != elem2.nvotes)
+            return elem1.nvotes > elem2.nvotes;
+
+        return true;
+    }
+
+    __device__
+    void sort_merbase(MerBase (&merbases)[4]){
+        for(int i = 0; i < 4; i++){
+            for(int j = 0; j < 4; j++){
+                if(comp_merbase(merbases[i], merbases[j])){
+                    MerBase temp = merbases[i];
+                    merbases[i] = merbases[j];
+                    merbases[j] = temp;
+                }
+            }
+        }
+    }
+  __device__
   void set_ext(int seq_depth) {
     // set extension similarly to how it is done with localassm in mhm
     MerBase mer_bases[4] = {{.base = 'A', .nvotes_hi_q = hi_q_exts.count_A, .nvotes = low_q_exts.count_A},
@@ -143,17 +169,15 @@ struct MerFreqs {
     for (int i = 0; i < 4; i++) {
       mer_bases[i].rating = mer_bases[i].get_base_rating(seq_depth);
     }
+
     // sort bases in descending order of quality
-    sort(mer_bases, mer_bases + sizeof(mer_bases) / sizeof(mer_bases[0]),
-         [](const auto &elem1, const auto &elem2) -> bool {
-           if (elem1.rating != elem2.rating) return elem1.rating > elem2.rating;
-           if (elem1.nvotes_hi_q != elem2.nvotes_hi_q) return elem1.nvotes_hi_q > elem2.nvotes_hi_q;
-           if (elem1.nvotes != elem2.nvotes) return elem1.nvotes > elem2.nvotes;
-           return true;
-         });
+    sort_merbase(mer_bases);
+
     int top_rating = mer_bases[0].rating;
     int runner_up_rating = mer_bases[1].rating;
-    if (top_rating < runner_up_rating) DIE("top_rating ", top_rating, " < ", runner_up_rating, "\n");
+    //if (top_rating < runner_up_rating) 
+    //DIE("top_rating ", top_rating, " < ", runner_up_rating, "\n");
+    //the commented stuff above is handled by the assertion below on GPU
     assert(top_rating >= runner_up_rating);
     int top_rated_base = mer_bases[0].base;
     ext = 'X';
