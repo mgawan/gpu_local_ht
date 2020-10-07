@@ -119,6 +119,7 @@ struct MerFreqs {
     char base;
     uint16_t nvotes_hi_q, nvotes, rating;
 
+    __device__
     uint16_t get_base_rating(int depth) {
       double min_viable = max(LASSM_MIN_VIABLE_DEPTH * depth, 2.0);
       double min_expected_depth = max(LASSM_MIN_EXPECTED_DEPTH * depth, 2.0);
