@@ -126,77 +126,58 @@ __device__
 void count_mers(ht_loc* thrd_loc_ht, char* loc_r_reads, char* loc_r_quals, uint32_t* reads_r_offset, uint32_t& r_rds_cnt, 
 uint32_t* rds_count_r_sum, uint32_t& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, uint32_t& excess_reads){
     cstr_type read;
+    cstr_type qual;
     uint32_t running_sum_len = 0;
     for(int i = 0; i < r_rds_cnt; ++){
         read.start_ptr = loc_r_reads + running_sum_len;
-        if(i == 0)
-            if(threadIdx.x == 0)
+        qual.start_ptr = loc_r_quals + running_sum_len;
+        if(i == 0){
+            if(threadIdx.x == 0){
                 read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i];
-            else   
+                qual.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i];
+                }
+            else{   
                 read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x - 1] -1)];
-        else
+                qual.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x - 1] -1)];
+                }
+            }
+        else{
             read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + (i-1)];
+            qual.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + (i-1)];
+            }
 
-    if (mer_len > read.length) // skip the read which is smaller than merlen
-        continue;
-    int num_mers = read.length - mer_len;
-    cstr_type mer(read.cstr_type, mer_len)
-    for( int start = 0; start < num_mers; start++){
-        //TODO: on cpu side add a check that if a certain read contains 'N', that is not included, check this with steve, 
-        // because searching a single mer for an N is going to be too slow
-        ht_loc temp_Mer = ht_get(thrd_loc_ht, mer);
-        if(temp_Mer.key.length == EMPTY){
-            temp_Mer.key = mer;
-            temp_Mer.val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0}; // TODO: verify that this constructor works on GPU
-        }
-        int ext_pos = start + mer_len;
-        assert(ext_pos < (int)read.length); // TODO: verify that assert works on gpu
-        char ext = read[ext_pos];
-        if (ext == 'N') continue; // TODO: why the redundant check?
-        int qual = read_seq.quals[ext_pos] - qual_offset;/*********////////
-//       if (qual >= LASSM_MIN_QUAL) it->second.low_q_exts.inc(ext, 1);
-//       if (qual >= LASSM_MIN_HI_QUAL) it->second.hi_q_exts.inc(ext, 1);
-        
+        if (mer_len > read.length) // skip the read which is smaller than merlen
+            continue;
+        int num_mers = read.length - mer_len;
+        cstr_type mer(read.cstr_type, mer_len)
+        for( int start = 0; start < num_mers; start++){
+            //TODO: on cpu side add a check that if a certain read contains 'N', that is not included, check this with steve, 
+            // because searching a single mer for an N is going to be too slow
+            ht_loc temp_Mer = ht_get(thrd_loc_ht, mer);
+            if(temp_Mer.key.length == EMPTY){
+                temp_Mer.key = mer;
+                temp_Mer.val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0}; // TODO: verify that this constructor works on GPU
+            }
+            int ext_pos = start + mer_len;
+            assert(ext_pos < (int)read.length); // TODO: verify that assert works on gpu
+            char ext = read[ext_pos];
+            if (ext == 'N') continue; // TODO: why the redundant check?
+            int qual_diff = qual[ext_pos] - qual_offset;
+            if (qual_diff >= LASSM_MIN_QUAL) temp_Mer.val.low_q_exts.inc(ext, 1);
+            if (qual_diff >= LASSM_MIN_HI_QUAL) temp_Mer.val.hi_q_exts.inc(ext, 1);
 
+            mer.start_ptr = mer.start_ptr + 1;
         }
+       running_sum_len += read.length; // right before the for loop ends, update the prev_len to offset next read correctly
     }
 
-  
-
-
-    running_sum_len += read.length; // right before the for loop ends, update the prev_len to offset next read correctly
-    //TODO: this should be a running sum;
+    //setting extension by traversing the completed table
+    // TODO: think of a better way to do this
+    for (int k = 0; k < max_table_size; k++) {
+        if( thrd_loc_ht[k].key.length != EMPTY)
+            thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
+    }
 }
-
-//   int num_reads = 0;
-//   // split reads into kmers and count frequency of high quality extensions
-//   for (auto &read_seq : reads) {
-//     num_reads++;
-//     if (num_reads > LASSM_MAX_COUNT_MERS_READS) {
-//       excess_reads += reads.size() - LASSM_MAX_COUNT_MERS_READS;
-//       break;
-//     }
-//     progress();
-//     if (mer_len >= (int)read_seq.seq.length()) continue;
-//     int num_mers = read_seq.seq.length() - mer_len;
-//     for (int start = 0; start < num_mers; start++) {
-//       // skip mers that contain Ns
-//       if (read_seq.seq.find("N", start) != string::npos) continue;
-//       string mer = read_seq.seq.substr(start, mer_len);
-//       auto it = mers_ht.find(mer);
-//       if (it == mers_ht.end()) {
-//         mers_ht.insert({mer, {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0}});
-//         it = mers_ht.find(mer);
-//       }
-//       int ext_pos = start + mer_len;
-//       assert(ext_pos < (int)read_seq.seq.length());
-//       char ext = read_seq.seq[ext_pos];
-//       if (ext == 'N') continue;
-//       int qual = read_seq.quals[ext_pos] - qual_offset;
-//       if (qual >= LASSM_MIN_QUAL) it->second.low_q_exts.inc(ext, 1);
-//       if (qual >= LASSM_MIN_HI_QUAL) it->second.hi_q_exts.inc(ext, 1);
-//     }
-//   }
 
 //same kernel will be used for right and left walks
 __global__ void iterative_walks_kernel(uint32_t* cid, uint32_t* ctg_offsets, char* contigs, 
