@@ -146,7 +146,7 @@ int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int64_t excess_reads, 
 
     //main for loop
     for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
-
+        count_mers(reads, mers_ht);
     }
 
 }
