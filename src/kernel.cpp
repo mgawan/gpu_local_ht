@@ -125,7 +125,10 @@ void count_mers(char* loc_r_reads, uint32_t* reads_r_offset, uint32_t& r_rds_cnt
     for(int i = 0; i < r_rds_cnt; ++){
         read.start_ptr = loc_r_reads + prev_len;
         if(i == 0)
-            read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i];
+            if(threadIdx.x == 0)
+                read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i];
+            else   
+                read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x - 1] -1)];
         else
             read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + (i-1)];
     }
@@ -192,7 +195,7 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
             loc_r_reads = reads_r;
         else
             loc_r_reads = reads_r + reads_r_offset[reads_count_r_sum[idx - 1] - 1]; // you want to start from where previous contigs, last read ends.
-            
+
         if (reads_count_l_sum[idx - 1] == 0)
             loc_l_reads = reads_l;
         else
@@ -202,6 +205,7 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
 
     //main for loop
     for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
+        //TODO: add a check if read count is zero, just skip
         count_mers(loc_r_reads, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads);
     }
 
