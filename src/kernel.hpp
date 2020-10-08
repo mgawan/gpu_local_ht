@@ -74,6 +74,7 @@ struct ExtCounts {
   };
 
 struct MerFreqs {
+
   // how many times this kmer has occurred: don't need to count beyond 65536
   // count of high quality extensions and low quality extensions - structure comes from kmer_dht.hpp
   ExtCounts hi_q_exts, low_q_exts;
@@ -81,6 +82,19 @@ struct MerFreqs {
   char ext;
   // the count of the final extension
   int count;
+    __device__ MerFeqs(){
+    ext = 'o';
+    count = -1;
+    hi_q_exts.count_A = -1;
+    hi_q_exts.count_C = -1;
+    hi_q_exts.count_T = -1;
+    hi_q_exts.count_G = -1;
+
+    low_q_exts.count_A = -1;
+    low_q_exts.count_C = -1;
+    low_q_exts.count_T = -1;
+    low_q_exts.count_G = -1;
+  }
 // MerBase was defined here previously, moving it out for simplicity but check on why it was here before?
     __device__
     void comp_merbase(MerBase& elem1, MerBase& elem2){
@@ -161,6 +175,10 @@ struct MerFreqs {
 struct loc_ht{
     cstr_type key;
     MerFreqs val;
+    __device__ loc_ht(cstr_type in_key, MerFreqs in_val){
+      key = in_key;
+      val = in_val;
+    }
 };
 
 
