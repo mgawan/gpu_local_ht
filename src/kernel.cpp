@@ -132,6 +132,21 @@ void count_mers(char* loc_r_reads, uint32_t* reads_r_offset, uint32_t& r_rds_cnt
         else
             read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + (i-1)];
     }
+    if (mer_len > read.length) // skip the read which is smaller than merlen
+        continue;
+    int num_mers = read.length - mer_len;
+
+    for( int j = 0; j < num_mers; j++){
+        cstr_type mer(read.cstr_type + j, mer_len);
+        //TODO: on cpu side add a check that if a certain read contains 'N', that is not included, check this with steve, 
+        // because searching a single mer for an N is going to be too slow
+        
+
+    }
+
+
+  
+
 
     prev_len = read.length; // right before the for loop ends, update the prev_len to offset next read correctly
 }
@@ -206,6 +221,8 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
     //main for loop
     for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
         //TODO: add a check if read count is zero, just skip
+          //TODO: add a check if total number of reads exceeds a certain number/too large, skip that one, may be do this on cpu 
+          // to preserve memory on GPU
         count_mers(loc_r_reads, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads);
     }
 
