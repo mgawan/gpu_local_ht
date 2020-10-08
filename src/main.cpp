@@ -16,7 +16,8 @@ int main (int argc, char* argv[]){
     int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size,max_r_count, max_l_count);
     int32_t vec_size = data_in.size();
-    print_vals("max_lcount:",max_l_count,"max_r_count:", max_r_count);
+    print_vals("max_l_count:",max_l_count,"max_r_count:", max_r_count);
+    int32_t max_read_count = max_r_count>max_l_count ? max_r_count : max_l_count;
 
     //host allocations for converting loc_assm_data to prim types
     int32_t *cid_h = new int32_t[vec_size];
@@ -41,6 +42,7 @@ int main (int argc, char* argv[]){
     char *ctg_seqs_d, *reads_left_d, *reads_right_d, *quals_left_d, *quals_right_d;
     double *depth_d;
     int64_t *term_counts_d;
+    ht_loc *d_ht;
 
     CUDA_CHECK(cudaMalloc(&cid_d, sizeof(int32_t) * vec_size));
     CUDA_CHECK(cudaMalloc(&ctg_seq_offsets_d, sizeof(int32_t) * vec_size));
@@ -55,6 +57,11 @@ int main (int argc, char* argv[]){
     CUDA_CHECK(cudaMalloc(&quals_right_d, sizeof(char) * total_r_reads * max_read_size));
     CUDA_CHECK(cudaMalloc(&quals_left_d, sizeof(char) * total_l_reads * max_read_size));
     CUDA_CHECK(cudaMalloc(&term_counts_d, sizeof(int64_t)*3));
+    // if we separate out kernels for right and left walks then we can use r_count/l_count separately but for now use the max of two
+    // also subtract the appropriate kmer length from max_read_size to reduce memory footprint of global ht_loc.
+    // one local hashtable for each thread, so total hash_tables equal to vec_size i.e. total contigs
+    // TODO: to account for overfilling of the hashtable, consider assuming load factor of 0.8 and add a cushion of memory in hashtable
+    CUDA_CHECK(cudaMalloc(&d_ht, sizeof(ht_loc)*(max_read_size*max_read_count)*vac_size)); 
 
 
 

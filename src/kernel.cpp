@@ -119,16 +119,14 @@ __device__ cstr_type ht_get(loc_ht* thread_ht, cstr_type kmer_key){
 
 //same kernel will be used for right and left walks
 __global__ void iterative_walks_kernel(uint32_t* cid, uint32_t* ctg_offsets, char* contigs, 
-char* reads_l, char* reads_r, char* reads_l_offset, char reads_r_offset, char* rds_count_l, char* rds_count_r, uint32_t* ctg_depth, char* reads_seqs, 
+char* reads_l, char* reads_r, char* reads_l_offset, char reads_r_offset, char* rds_count_l, char* rds_count_r, uint32_t* ctg_depth, char* reads_seqs, ht_loc* global_ht,
 int max_mer_len, int kmer_len, int qual_offset, int walk_len_limit, int64_t *term_counts,
-int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int64_t excess_reads){
+int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int64_t excess_reads, int32_t max_read_size, int32_t max_read_count){
     unsigned idx = threadIdx.x + blockIdx.x * blockDimx.x;
     cstr_type loc_ctg;
     char *loc_r_reads, *loc_l_reads;
     uint32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
-    //TODO: add device memory for MerMap hashtable using the previous loc_ht implementation
-    loc_ht* loc_mer_map;
-
+    loc_ht* loc_mer_map = global_ht + idx * max_read_size * max_read_count;
 
     if(idx == 0){
         loc_ctg.start_ptr = contigs;

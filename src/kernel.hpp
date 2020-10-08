@@ -23,64 +23,11 @@ struct cstr_type{
     }
 };
 
-struct loc_ht{
-    cstr_type key;
-    cstr_type val;
-};
-
 struct ExtCounts {
   uint16_t count_A;
   uint16_t count_C;
   uint16_t count_G;
   uint16_t count_T;
-
-//   __device__  
-//   void  cu_pr_comp(cu_pair& elem1, cu_pair& elem2){
-//     if(elem1.y == elem2.y)
-//         return elem1.x > elem2.x;
-//     else
-//         return elem1.y > elem1.y;
-//   }
-//   __device__
-//   void sort(cu_pair (&counts)[4]){
-//     for(int i = 0; i < 4; i++){
-//         for(int j = 0; j < 4; j++){
-//             if(cu_pr_comp(counts[i], counts[j])){
-//                 cu_pr_comp temp = counts[i];
-//                 counts[i] = counts[j];
-//                 counts[j] = temp;
-//             }
-//         }
-//     }
-//   }
-
-//   __device__ 
-//   void get_sorted(cu_pair (&counts)[4]) {
-//     cu_pair temp_pair;
-//     temp_pair.x = 'A';
-//     temp_pair.y = (int)count_A;
-//     counts[0] = temp_pair;
-
-//     temp_pair.x = 'C';
-//     temp_pair.y = (int)count_C;
-//     counts[1] = temp_pair;
-
-//     temp_pair.x = 'G';
-//     temp_pair.y = (int)count_G;
-//     counts[2] = temp_pair;
-
-//     temp_pair.x = 'T';
-//     temp_pair.y = (int)count_T;
-//     counts[3] = temp_pair;
-
-//     sort(counts);// sorts in place on the array, passed by reference
-//   }
-
-//   __device__ 
-//   bool is_zero() {
-//     if (count_A + count_C + count_G + count_T == 0) return true;
-//     return false;
-//   }
 
 //TODO: replace numeric_limits by either a suitable constant/predefined value or find a device alternate
   __device__
@@ -106,14 +53,6 @@ struct ExtCounts {
   }
 };
 
-struct MerFreqs {
-  // how many times this kmer has occurred: don't need to count beyond 65536
-  // count of high quality extensions and low quality extensions - structure comes from kmer_dht.hpp
-  ExtCounts hi_q_exts, low_q_exts;
-  // the final extensions chosen - A,C,G,T, or F,X
-  char ext;
-  // the count of the final extension
-  int count;
 
   struct MerBase {
     char base;
@@ -134,7 +73,15 @@ struct MerFreqs {
     }
   };
 
-
+struct MerFreqs {
+  // how many times this kmer has occurred: don't need to count beyond 65536
+  // count of high quality extensions and low quality extensions - structure comes from kmer_dht.hpp
+  ExtCounts hi_q_exts, low_q_exts;
+  // the final extensions chosen - A,C,G,T, or F,X
+  char ext;
+  // the count of the final extension
+  int count;
+// MerBase was defined here previously, moving it out for simplicity but check on why it was here before?
     __device__
     void comp_merbase(MerBase& elem1, MerBase& elem2){
         if(elem1.rating != elem2.rating)
@@ -209,6 +156,13 @@ struct MerFreqs {
     }
   }
 };
+
+
+struct loc_ht{
+    cstr_type key;
+    MerFreqs val;
+};
+
 
 __global__ void ht_kernel(loc_ht* ht, char* contigs, int* offset_sum, int kmer_size);
 __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, cstr_type ctg_val);
