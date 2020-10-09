@@ -190,7 +190,12 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
     loc_ht* loc_mer_map = global_ht + idx * max_read_size * max_read_count;
     uint32_t loc_ctg_depth = ctg_depth[idx];
     int64_t excess_reads;
-    int qual_offset;
+    int qual_offset, max_ht_size = max_read_size * max_read_count;
+
+    for(int k = 0; k < max_ht_size; k++){
+        loc_mer_map[k].key.length = EMPTY;
+    }
+    //TODO: initialize the hashtable to empty, find a faster way of doing this
 
     if(idx == 0){
         loc_ctg.start_ptr = contigs;
