@@ -195,7 +195,7 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
     for(int k = 0; k < max_ht_size; k++){
         loc_mer_map[k].key.length = EMPTY;
     }
-    //TODO: initialize the hashtable to empty, find a faster way of doing this
+    //TODO: initalize hash table find a faster way of doing this
 
     if(idx == 0){
         loc_ctg.start_ptr = contigs;
@@ -230,15 +230,16 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
             loc_l_quals = quals_l;
         else
             loc_l_quals = quals_l + reads_l_offset[reads_count_l_sum[idx - 1] - 1]; // you want to start from where previous contigs, last read ends. 
-        //oc_l_reads = reads_l + reads_l_offset[reads_count_l_sum[idx - 1]];
     }
 
     //main for loop
-    for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
-        //TODO: add a check if read count is zero, just skip
+    //TODO: commenting out the main for loop for testing count_mers
+    //for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
           //TODO: add a check if total number of reads exceeds a certain number/too large, skip that one, may be do this on cpu 
           // to preserve memory on GPU
-        count_mers(loc_mer_map, loc_r_reads, loc_r_quals, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads);
-    }
+        if(r_rds_cnt != 0)    //if count is zero, no need to count
+            count_mers(loc_mer_map, loc_r_reads, loc_r_quals, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, 
+            mer_len, qual_offset, excess_reads);
+   // }
 
 }
