@@ -153,7 +153,7 @@ uint32_t* rds_count_r_sum, uint32_t& loc_ctg_depth, uint32_t& mer_len, uint32_t&
         for( int start = 0; start < num_mers; start++){
             //TODO: on cpu side add a check that if a certain read contains 'N', that is not included, check this with steve, 
             // because searching a single mer for an N is going to be too slow
-            ht_loc temp_Mer = ht_get(thrd_loc_ht, mer);
+            ht_loc &temp_Mer = ht_get(thrd_loc_ht, mer);
             if(temp_Mer.key.length == EMPTY){
                 temp_Mer.key = mer;
                 temp_Mer.val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0}; // TODO: verify that this constructor works on GPU

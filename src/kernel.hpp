@@ -185,7 +185,9 @@ struct loc_ht{
 __global__ void ht_kernel(loc_ht* ht, char* contigs, int* offset_sum, int kmer_size);
 __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, cstr_type ctg_val);
 __device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key);
-__device__ cstr_type ht_get(loc_ht* thread_ht, cstr_type kmer_key);
+__device__ ht_loc& ht_get(loc_ht* thread_ht, cstr_type kmer_key);
 __device__ unsigned hash_func(cstr_type key);
+__device__ void count_mers(ht_loc* thrd_loc_ht, char* loc_r_reads, char* loc_r_quals, uint32_t* reads_r_offset, uint32_t& r_rds_cnt, 
+uint32_t* rds_count_r_sum, uint32_t& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, uint32_t& excess_reads);
 __global__ void iterative_walks_kernel(uint32_t* cid, char *contigs, uint32_t* ctg_depth, char* reads_seqs, int max_mer_len, int kmer_len,
  int qual_offset, int walk_len_limit, int64_t *term_counts, int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int64_t excess_reads);
