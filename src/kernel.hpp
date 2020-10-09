@@ -1,6 +1,10 @@
 #include<stdio.h>
 #define EMPTY 0xFFFFFFFF
-#define HT_SIZE 300
+//#define HT_SIZE 300
+//TODO: add this in a separate file for definitions
+#define LASSM_MIN_QUAL 10
+#define LASSM_MIN_HI_QUAL 20
+
 struct cstr_type{
     char* start_ptr;
     int length;
@@ -29,25 +33,25 @@ struct ExtCounts {
   uint16_t count_G;
   uint16_t count_T;
 
-//TODO: replace numeric_limits by either a suitable constant/predefined value or find a device alternate
+//TODO: replacing numeric_limits by either a suitable constant/predefined value or find a device alternate, check if this is correct with Steve
   __device__
   void inc(char ext, int count) {
     switch (ext) {
       case 'A':
         count += count_A;
-        count_A = (count < numeric_limits<uint16_t>::max()) ? count : numeric_limits<uint16_t>::max();
+        count_A = (count < 65535) ? count : 65535;
         break;
       case 'C':
         count += count_C;
-        count_C = (count < numeric_limits<uint16_t>::max()) ? count : numeric_limits<uint16_t>::max();
+        count_C = (count < 65535) ? count : 65535;
         break;
       case 'G':
         count += count_G;
-        count_G = (count < numeric_limits<uint16_t>::max()) ? count : numeric_limits<uint16_t>::max();
+        count_G = (count < 65535) ? count : 65535;
         break;
       case 'T':
         count += count_T;
-        count_T = (count < numeric_limits<uint16_t>::max()) ? count : numeric_limits<uint16_t>::max();
+        count_T = (count < 65535) ? count : 65535;
         break;
     }
   }
@@ -182,11 +186,12 @@ struct loc_ht{
 };
 
 
+__device__ print_mer(cstr_type mer);
 __global__ void ht_kernel(loc_ht* ht, char* contigs, int* offset_sum, int kmer_size);
-__device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, cstr_type ctg_val);
-__device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key);
-__device__ ht_loc& ht_get(loc_ht* thread_ht, cstr_type kmer_key);
-__device__ unsigned hash_func(cstr_type key);
+__device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, cstr_type ctg_val, uint32_t max_size);
+__device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size);
+__device__ ht_loc& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size);
+__device__ unsigned hash_func(cstr_type key, uint32_t max_size);
 __device__ void count_mers(ht_loc* thrd_loc_ht, char* loc_r_reads, char* loc_r_quals, uint32_t* reads_r_offset, uint32_t& r_rds_cnt, 
 uint32_t* rds_count_r_sum, uint32_t& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, uint32_t& excess_reads);
 __global__ void iterative_walks_kernel(uint32_t* cid, char *contigs, uint32_t* ctg_depth, char* reads_seqs, int max_mer_len, int kmer_len,

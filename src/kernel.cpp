@@ -2,6 +2,12 @@
 
 
 //TODO: all the hashtable entries need to be set to empty, figure that out
+__device__ print_mer(cstr_type& mer){
+    for(int i = 0; i < mer.length; i++){
+        printf("%c",mer.start_ptr[i]);
+    }
+    printf("\n");
+}
 __global__ void ht_kernel(loc_ht* ht, char* contigs, int* offset_sum, int kmer_size){
     int idx = blockIdx.x*gridDim.x + threadIdx.x;
     cstr_type loc_contig;
@@ -49,7 +55,8 @@ __global__ void ht_kernel(loc_ht* ht, char* contigs, int* offset_sum, int kmer_s
 }
 
 //TODO: make sure that the returned hash value is wthin the range of HT size
-__device__ unsigned hash_func(cstr_type key){
+//TODO: find a better hash func for strings
+__device__ unsigned hash_func(cstr_type key, uint32_t max_size){
     unsigned hash, i;
     for(hash = i = 0; i < key.length; ++i)
     {
@@ -60,10 +67,11 @@ __device__ unsigned hash_func(cstr_type key){
     hash += (hash << 3);
     hash ^= (hash >> 11);
     hash += (hash << 15);
-    return hash%HT_SIZE;//(hash & (HT_SIZE - 1));
+    //TODO: this way of limiting hash value is not good, try to find a better way
+    return hash%max_size;//(hash & (HT_SIZE - 1));
 }
 
-__device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, MerFreq mer_val){
+__device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, MerFreq mer_val, uint32_t max_size){
     unsigned hash_val = hash_func(kmer_key);
     unsigned orig_hash = hash_val;
     //int count = 0; // for debugging
@@ -76,28 +84,28 @@ __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, MerFreq mer_val
             thread_ht[hash_val].val = mer_val;
             return;
         }
-        hash_val = (hash_val +1 ) %HT_SIZE;//(hash_val + 1) & (HT_SIZE-1);
+        hash_val = (hash_val +1 ) % max_size;//(hash_val + 1) & (HT_SIZE-1);
         //count++; //for debugging
 
     }
 }
 
-__device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key){
-    int hash_val = hash_func(kmer_key);
-    while(true){
-        if(thread_ht[hash_val].key == kmer_key){
-            thread_ht[hash_val].key.length = EMPTY;
-            return;
-        }
-        if(thread_ht[hash_val].key.length == EMPTY){
-            return;
-        }
-        hash_val = (hash_val + 1) & (HT_SIZE -1);
-    }
-}
+// __device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key){
+//     int hash_val = hash_func(kmer_key);
+//     while(true){
+//         if(thread_ht[hash_val].key == kmer_key){
+//             thread_ht[hash_val].key.length = EMPTY;
+//             return;
+//         }
+//         if(thread_ht[hash_val].key.length == EMPTY){
+//             return;
+//         }
+//         hash_val = (hash_val + 1) & (HT_SIZE -1);
+//     }
+// }
 
 __device__ 
-ht_loc& ht_get(loc_ht* thread_ht, cstr_type kmer_key){
+ht_loc& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
     unsigned hash_val = hash_func(kmer_key);
     unsigned orig_hash = hash_val;
     
@@ -109,13 +117,13 @@ ht_loc& ht_get(loc_ht* thread_ht, cstr_type kmer_key){
             //printf("key found, returning\n");// keep this for debugging
             return thread_ht[hash_val];
         }
-        hash_val = (hash_val +1 ) %HT_SIZE;//hash_val = (hash_val + 1) & (HT_SIZE -1);
+        hash_val = (hash_val +1 ) %max_size;//hash_val = (hash_val + 1) & (HT_SIZE -1);
         if(hash_val == orig_hash){ // loop till you reach the same starting positions and then return error
             printf("*****end reached, hashtable full*****\n"); // for debugging
             printf("*****end reached, hashtable full*****\n");
             printf("*****end reached, hashtable full*****\n");
             return ht_loc(cstr_type(NULL,-1), MerFreqs());
-            }
+        }
     }
 
 }
@@ -123,7 +131,7 @@ ht_loc& ht_get(loc_ht* thread_ht, cstr_type kmer_key){
 
 
 __device__ 
-void count_mers(ht_loc* thrd_loc_ht, char* loc_r_reads, char* loc_r_quals, uint32_t* reads_r_offset, uint32_t& r_rds_cnt, 
+void count_mers(ht_loc* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, uint32_t* reads_r_offset, uint32_t& r_rds_cnt, 
 uint32_t* rds_count_r_sum, uint32_t& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, uint32_t& excess_reads){
     cstr_type read;
     cstr_type qual;
@@ -151,9 +159,10 @@ uint32_t* rds_count_r_sum, uint32_t& loc_ctg_depth, uint32_t& mer_len, uint32_t&
         int num_mers = read.length - mer_len;
         cstr_type mer(read.cstr_type, mer_len)
         for( int start = 0; start < num_mers; start++){
+            print_mer(mer);
             //TODO: on cpu side add a check that if a certain read contains 'N', that is not included, check this with steve, 
             // because searching a single mer for an N is going to be too slow
-            ht_loc &temp_Mer = ht_get(thrd_loc_ht, mer);
+            ht_loc &temp_Mer = ht_get(thrd_loc_ht, mer, max_ht_size);
             if(temp_Mer.key.length == EMPTY){
                 temp_Mer.key = mer;
                 temp_Mer.val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0}; // TODO: verify that this constructor works on GPU
@@ -165,7 +174,7 @@ uint32_t* rds_count_r_sum, uint32_t& loc_ctg_depth, uint32_t& mer_len, uint32_t&
             int qual_diff = qual[ext_pos] - qual_offset;
             if (qual_diff >= LASSM_MIN_QUAL) temp_Mer.val.low_q_exts.inc(ext, 1);
             if (qual_diff >= LASSM_MIN_HI_QUAL) temp_Mer.val.hi_q_exts.inc(ext, 1);
-
+            
             mer.start_ptr = mer.start_ptr + 1;
         }
        running_sum_len += read.length; // right before the for loop ends, update the prev_len to offset next read correctly
@@ -190,9 +199,9 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
     loc_ht* loc_mer_map = global_ht + idx * max_read_size * max_read_count;
     uint32_t loc_ctg_depth = ctg_depth[idx];
     int64_t excess_reads;
-    int qual_offset, max_ht_size = max_read_size * max_read_count;
+    uint32_t qual_offset, max_ht_size = max_read_size * max_read_count;
 
-    for(int k = 0; k < max_ht_size; k++){
+    for(uint32_t k = 0; k < max_ht_size; k++){
         loc_mer_map[k].key.length = EMPTY;
     }
     //TODO: initalize hash table find a faster way of doing this
@@ -237,8 +246,9 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
     //for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
           //TODO: add a check if total number of reads exceeds a certain number/too large, skip that one, may be do this on cpu 
           // to preserve memory on GPU
+          int mer_len = 21;
         if(r_rds_cnt != 0)    //if count is zero, no need to count
-            count_mers(loc_mer_map, loc_r_reads, loc_r_quals, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, 
+            count_mers(loc_mer_map, loc_r_reads, max_ht_size, loc_r_quals, reads_r_offset, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, 
             mer_len, qual_offset, excess_reads);
    // }
 
