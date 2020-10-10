@@ -120,7 +120,7 @@ int main (int argc, char* argv[]){
     CUDA_CHECK(cudaMemcpy(cid_d, cid_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(ctg_seq_offsets_d, ctg_seq_offsets_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(reads_l_offset_d, reads_l_offset_h, sizeof(int32_t) * total_l_reads, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(reads_r_offset_d, reads_r_offset_d, sizeof(int32_t) * total_r_reads, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(reads_r_offset_d, reads_r_offset_h, sizeof(int32_t) * total_r_reads, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(rds_l_cnt_offset_d, rds_l_cnt_offset_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(rds_r_cnt_offset_d, rds_r_cnt_offset_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(ctg_seqs_d, ctg_seqs_h, sizeof(char) * max_ctg_size * vec_size, cudaMemcpyHostToDevice));

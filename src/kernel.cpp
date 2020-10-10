@@ -145,18 +145,20 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
         read.start_ptr = loc_r_reads + running_sum_len;
         qual.start_ptr = loc_r_quals + running_sum_len;
         if(i == 0){
-            if(threadIdx.x == 0){
-                read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i];
-                qual.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i];
+            if(idx == 0){
+                read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i];
+                qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i];
+                if(DEBUG_PRINT_GPU)
+                    printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d\n",rds_count_r_sum[idx], r_rds_cnt, reads_r_offset[0]);
                 }
             else{   
-                read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x - 1] -1)];
-                qual.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x - 1] -1)];
+                read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
+                qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
                 }
             }
         else{
-            read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + (i-1)];
-            qual.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + (i-1)];
+            read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + (i-1)];
+            qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + (i-1)];
             }
         if(DEBUG_PRINT_GPU){
             printf("mer_len:%d, read_len:%d\n",mer_len, read.length);
@@ -168,7 +170,8 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
         int num_mers = read.length - mer_len;
         cstr_type mer(read.start_ptr, mer_len);
         for( int start = 0; start < num_mers; start++){
-            print_mer(mer);
+            // if(DEBUG_PRINT_GPU)
+            //     print_mer(mer);
             //TODO: on cpu side add a check that if a certain read contains 'N', that is not included, check this with steve, 
             // because searching a single mer for an N is going to be too slow
             loc_ht &temp_Mer = ht_get(thrd_loc_ht, mer, max_ht_size);
@@ -194,8 +197,16 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
     //setting extension by traversing the completed table
     // TODO: think of a better way to do this
     for (int k = 0; k < max_ht_size; k++) {
-        if( thrd_loc_ht[k].key.length != EMPTY)
+        if( thrd_loc_ht[k].key.length != EMPTY){
             thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
+            if(DEBUG_PRINT_GPU){
+                printf("from ht:\n");
+                print_mer(thrd_loc_ht[k].key);
+                printf("MerFreq.ext:%c, MerFreq.count:%d\n",thrd_loc_ht[k].val.ext,thrd_loc_ht[k].val.count);
+                thrd_loc_ht[k].val.hi_q_exts.print();
+                thrd_loc_ht[k].val.low_q_exts.print();
+            }
+        }
     }
 }
 
@@ -210,7 +221,7 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
     loc_ht* loc_mer_map = global_ht + idx * max_read_size * max_read_count;
     double loc_ctg_depth = ctg_depth[idx];
     int64_t excess_reads;
-    uint32_t qual_offset, max_ht_size = max_read_size * max_read_count;
+    uint32_t qual_offset = 0, max_ht_size = max_read_size * max_read_count;
 
     for(uint32_t k = 0; k < max_ht_size; k++){
         loc_mer_map[k].key.length = EMPTY;

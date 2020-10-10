@@ -49,9 +49,14 @@ struct ExtCounts {
   uint16_t count_G;
   uint16_t count_T;
 
+  __device__ void print(){
+    printf("count_A:%d, count_C:%d, count_G:%d, count_T:%d\n", count_A, count_C, count_G, count_T);
+  }
+
 //TODO: replacing numeric_limits by either a suitable constant/predefined value or find a device alternate, check if this is correct with Steve
   __device__
   void inc(char ext, int count) {
+    printf("******inc called******\n");
     switch (ext) {
       case 'A':
         count += count_A;
