@@ -3,6 +3,18 @@
 #define EMPTY 0xFFFFFFFF
 //#define HT_SIZE 300
 //TODO: add this in a separate file for definitions
+#ifdef DEBUG_GPU
+#define DEBUG_PRINT_GPU 1
+#else
+#define DEBUG_PRINT_GPU 0
+#endif
+
+#ifdef DEBUG_CPU
+#define DEBUG_PRINT_CPU 1
+#else
+#define DEBUG_PRINT_CPU 0
+#endif
+
 #define LASSM_MIN_QUAL 10
 #define LASSM_MIN_HI_QUAL 20
 #define LASSM_MIN_VIABLE_DEPTH 0.2
@@ -199,7 +211,7 @@ __device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_si
 __device__ loc_ht& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size);
 __device__ unsigned hash_func(cstr_type key, uint32_t max_size);
 __device__ void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, int32_t* reads_r_offset, int32_t& r_rds_cnt, 
-int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, int64_t& excess_reads);
+int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, int64_t& excess_reads, const int idx);
 __global__ void iterative_walks_kernel(int32_t* cid, int32_t* ctg_offsets, char* contigs, char* reads_l, char* reads_r, char* quals_r, 
 char* quals_l, int32_t* reads_l_offset, int32_t* reads_r_offset, int32_t* rds_count_l_sum, int32_t* rds_count_r_sum, double* ctg_depth, loc_ht* global_ht,
 int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int32_t max_read_size, int32_t max_read_count);

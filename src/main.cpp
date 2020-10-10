@@ -9,6 +9,8 @@
 #define TOT_THREADS 1
 #define KMER_SZ 4
 
+
+
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
 int main (int argc, char* argv[]){
@@ -17,8 +19,10 @@ int main (int argc, char* argv[]){
     int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size,max_r_count, max_l_count);
     int32_t vec_size = data_in.size();
-    print_vals("max_l_count:",max_l_count,"max_r_count:", max_r_count);
-    print_loc_data(&data_in);
+    if(DEBUG_PRINT_CPU){
+        print_vals("max_l_count:",max_l_count,"max_r_count:", max_r_count);
+        print_loc_data(&data_in);
+        }
     int32_t max_read_count = max_r_count>max_l_count ? max_r_count : max_l_count;
 
     //host allocations for converting loc_assm_data to prim types
@@ -106,7 +110,8 @@ int main (int argc, char* argv[]){
         }
         rds_r_cnt_offset_h[i] = read_r_index; // running sum of right reads count
     }// data conversion for loop ends
-    print_vals("Completed reading in file and converting data to primitive types");
+    if(DEBUG_PRINT_CPU)
+        print_vals("Completed reading in file and converting data to primitive types...");
     for(int i = 0; i < 3; i++){
         term_counts_h[i] = 0;
     }
@@ -129,10 +134,14 @@ int main (int argc, char* argv[]){
     //call kernel here, one thread per contig
     unsigned total_threads = vec_size;
     int max_mer_len = 22;
+    if(DEBUG_PRINT_CPU)
+        print_vals("Calling Kernel...");
     iterative_walks_kernel<<<1,1>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
     depth_d, d_ht, max_mer_len, 22, 0, term_counts_d, 0, 0, 0, max_read_size, max_read_count);
 
     CUDA_CHECK(cudaFree(term_counts_d));
+    if(DEBUG_PRINT_CPU)
+        print_vals("Exiting...");
     //free up the memory
 
     

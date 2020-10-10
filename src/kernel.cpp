@@ -132,11 +132,16 @@ loc_ht& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
 
 __device__ 
 void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, int32_t* reads_r_offset, int32_t& r_rds_cnt, 
-int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, int64_t& excess_reads){
+int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, int64_t& excess_reads, const int idx){
     cstr_type read;
     cstr_type qual;
     uint32_t running_sum_len = 0;
+    if(DEBUG_PRINT_GPU)
+        printf("inside_count_mers\n");
     for(int i = 0; i < r_rds_cnt; i++){
+        if(DEBUG_PRINT_GPU)
+            printf("first read loop iter:%d\n",i);
+        //TODO: pass idx here
         read.start_ptr = loc_r_reads + running_sum_len;
         qual.start_ptr = loc_r_quals + running_sum_len;
         if(i == 0){
@@ -153,7 +158,11 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
             read.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + (i-1)];
             qual.length = reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[threadIdx.x] - r_rds_cnt) + (i-1)];
             }
-
+        if(DEBUG_PRINT_GPU){
+            printf("mer_len:%d, read_len:%d\n",mer_len, read.length);
+            printf("read:\n");
+            print_mer(read);
+          }
         if (mer_len > read.length) // skip the read which is smaller than merlen
             continue;
         int num_mers = read.length - mer_len;
@@ -194,7 +203,7 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
 __global__ void iterative_walks_kernel(int32_t* cid, int32_t* ctg_offsets, char* contigs, 
 char* reads_l, char* reads_r, char* quals_r, char* quals_l, int32_t* reads_l_offset, int32_t* reads_r_offset, int32_t* rds_count_l_sum, int32_t* rds_count_r_sum, double* ctg_depth, loc_ht* global_ht,
 int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int32_t max_read_size, int32_t max_read_count){
-    unsigned idx = threadIdx.x + blockIdx.x * gridDim.x;
+    const int idx = threadIdx.x + blockIdx.x * gridDim.x;
     cstr_type loc_ctg;
     char *loc_r_reads, *loc_l_reads, *loc_r_quals, *loc_l_quals;
     int32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
@@ -249,8 +258,13 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
           //TODO: add a check if total number of reads exceeds a certain number/too large, skip that one, may be do this on cpu 
           // to preserve memory on GPU
           uint32_t mer_len = 21;
-        if(r_rds_cnt != 0)    //if count is zero, no need to count
-            count_mers(loc_mer_map, loc_r_reads, max_ht_size, loc_r_quals, reads_r_offset, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads);
+          if(DEBUG_PRINT_GPU)
+            printf("read_count:%d\n",r_rds_cnt);
+        if(r_rds_cnt != 0){    //if count is zero, no need to count
+            if(DEBUG_PRINT_GPU)
+                printf("calling count_mers\n");
+            count_mers(loc_mer_map, loc_r_reads, max_ht_size, loc_r_quals, reads_r_offset, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads, idx);
+            }
    // }
 
 }
