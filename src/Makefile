@@ -1,4 +1,11 @@
 NVFLAGS=--std=c++11
+ifeq ($(DEBUG_CPU),TRUE)
+	NVFLAGS+=-DDEBUG_CPU
+endif
+
+ifeq ($(DEBUG_GPU),TRUE)
+	NVFLAGS+=-DDEBUG_GPU
+endif
 
 ht_loc: main.o kernel.o helper.o
 	nvcc --gpu-architecture=sm_70 $(NVFLAGS) -I. ./build/main.o ./build/helper.o ./build/kernel.o -o ./build/$@
