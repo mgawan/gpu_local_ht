@@ -1,9 +1,13 @@
 #include<stdio.h>
+#include <iostream>
 #define EMPTY 0xFFFFFFFF
 //#define HT_SIZE 300
 //TODO: add this in a separate file for definitions
 #define LASSM_MIN_QUAL 10
 #define LASSM_MIN_HI_QUAL 20
+#define LASSM_MIN_VIABLE_DEPTH 0.2
+#define LASSM_MIN_EXPECTED_DEPTH 0.3
+#define LASSM_RATING_THRES 0
 
 struct cstr_type{
     char* start_ptr;
@@ -86,22 +90,22 @@ struct MerFreqs {
   char ext;
   // the count of the final extension
   int count;
-    __device__ MerFeqs(){
-    ext = 'o';
-    count = -1;
-    hi_q_exts.count_A = -1;
-    hi_q_exts.count_C = -1;
-    hi_q_exts.count_T = -1;
-    hi_q_exts.count_G = -1;
+  //   __device__ MerFreqs(){
+  //   ext = 'o';
+  //   count = -1;
+  //   hi_q_exts.count_A = 0;
+  //   hi_q_exts.count_C = 0;
+  //   hi_q_exts.count_T = 0;
+  //   hi_q_exts.count_G = 0;
 
-    low_q_exts.count_A = -1;
-    low_q_exts.count_C = -1;
-    low_q_exts.count_T = -1;
-    low_q_exts.count_G = -1;
-  }
+  //   low_q_exts.count_A = 0;
+  //   low_q_exts.count_C = 0;
+  //   low_q_exts.count_T = 0;
+  //   low_q_exts.count_G = 0;
+  // }
 // MerBase was defined here previously, moving it out for simplicity but check on why it was here before?
     __device__
-    void comp_merbase(MerBase& elem1, MerBase& elem2){
+    bool comp_merbase(MerBase& elem1, MerBase& elem2){
         if(elem1.rating != elem2.rating)
             return elem1.rating > elem2.rating;
         if (elem1.nvotes_hi_q != elem2.nvotes_hi_q)
@@ -143,7 +147,9 @@ struct MerFreqs {
     //if (top_rating < runner_up_rating) 
     //DIE("top_rating ", top_rating, " < ", runner_up_rating, "\n");
     //the commented stuff above is handled by the assertion below on GPU
-    assert(top_rating >= runner_up_rating);
+   // assert(top_rating >= runner_up_rating);// for now finding a way around for assertion
+    if(top_rating < runner_up_rating)
+      printf("******* ASSERTION FAILED IN sort_merbase************");
     int top_rated_base = mer_bases[0].base;
     ext = 'X';
     count = 0;
@@ -186,13 +192,14 @@ struct loc_ht{
 };
 
 
-__device__ print_mer(cstr_type mer);
+__device__ void print_mer(cstr_type& mer);
 __global__ void ht_kernel(loc_ht* ht, char* contigs, int* offset_sum, int kmer_size);
 __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, cstr_type ctg_val, uint32_t max_size);
 __device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size);
-__device__ ht_loc& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size);
+__device__ loc_ht& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size);
 __device__ unsigned hash_func(cstr_type key, uint32_t max_size);
-__device__ void count_mers(ht_loc* thrd_loc_ht, char* loc_r_reads, char* loc_r_quals, uint32_t* reads_r_offset, uint32_t& r_rds_cnt, 
-uint32_t* rds_count_r_sum, uint32_t& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, uint32_t& excess_reads);
-__global__ void iterative_walks_kernel(uint32_t* cid, char *contigs, uint32_t* ctg_depth, char* reads_seqs, int max_mer_len, int kmer_len,
- int qual_offset, int walk_len_limit, int64_t *term_counts, int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int64_t excess_reads);
+__device__ void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, int32_t* reads_r_offset, int32_t& r_rds_cnt, 
+int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, int64_t& excess_reads);
+__global__ void iterative_walks_kernel(int32_t* cid, int32_t* ctg_offsets, char* contigs, char* reads_l, char* reads_r, char* quals_r, 
+char* quals_l, int32_t* reads_l_offset, int32_t* reads_r_offset, int32_t* rds_count_l_sum, int32_t* rds_count_r_sum, double* ctg_depth, loc_ht* global_ht,
+int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int32_t max_read_size, int32_t max_read_count);

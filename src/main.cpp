@@ -1,5 +1,5 @@
 #include <unordered_map>
-#include <iostream>
+//#include <iostream>
 #include <typeinfo>
 #include <random>
 #include <algorithm>
@@ -9,7 +9,8 @@
 #define TOT_THREADS 1
 #define KMER_SZ 4
 
-
+//TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
+// and contigs with only left are launched in left kernels.
 int main (int argc, char* argv[]){
     std::string in_file = argv[1];
     std::vector<CtgWithReads> data_in;
@@ -17,6 +18,7 @@ int main (int argc, char* argv[]){
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size,max_r_count, max_l_count);
     int32_t vec_size = data_in.size();
     print_vals("max_l_count:",max_l_count,"max_r_count:", max_r_count);
+    print_loc_data(&data_in);
     int32_t max_read_count = max_r_count>max_l_count ? max_r_count : max_l_count;
 
     //host allocations for converting loc_assm_data to prim types
@@ -42,7 +44,7 @@ int main (int argc, char* argv[]){
     char *ctg_seqs_d, *reads_left_d, *reads_right_d, *quals_left_d, *quals_right_d;
     double *depth_d;
     int64_t *term_counts_d;
-    ht_loc *d_ht;
+    loc_ht *d_ht;
 
     CUDA_CHECK(cudaMalloc(&cid_d, sizeof(int32_t) * vec_size));
     CUDA_CHECK(cudaMalloc(&ctg_seq_offsets_d, sizeof(int32_t) * vec_size));
@@ -61,7 +63,7 @@ int main (int argc, char* argv[]){
     // also subtract the appropriate kmer length from max_read_size to reduce memory footprint of global ht_loc.
     // one local hashtable for each thread, so total hash_tables equal to vec_size i.e. total contigs
     // TODO: to account for overfilling of the hashtable, consider assuming load factor of 0.8 and add a cushion of memory in hashtable
-    CUDA_CHECK(cudaMalloc(&d_ht, sizeof(ht_loc)*(max_read_size*max_read_count)*vac_size)); 
+    CUDA_CHECK(cudaMalloc(&d_ht, sizeof(loc_ht)*(max_read_size*max_read_count)*vec_size)); 
 
 
 
@@ -104,7 +106,7 @@ int main (int argc, char* argv[]){
         }
         rds_r_cnt_offset_h[i] = read_r_index; // running sum of right reads count
     }// data conversion for loop ends
-
+    print_vals("Completed reading in file and converting data to primitive types");
     for(int i = 0; i < 3; i++){
         term_counts_h[i] = 0;
     }
@@ -126,6 +128,11 @@ int main (int argc, char* argv[]){
 
     //call kernel here, one thread per contig
     unsigned total_threads = vec_size;
+    int max_mer_len = 22;
+    iterative_walks_kernel<<<1,1>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
+    depth_d, d_ht, max_mer_len, 22, 0, term_counts_d, 0, 0, 0, max_read_size, max_read_count);
+
+    CUDA_CHECK(cudaFree(term_counts_d));
     //free up the memory
 
     
