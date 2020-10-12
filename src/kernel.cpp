@@ -130,6 +130,10 @@ loc_ht& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
 
 
 
+__device__ void walk_mers(loc_ht* thrd_loc_ht, uint32_t max_ht_size, uint32_t& mer_len, char* mer_walk_temp, char* longest_walk, const int idx){
+    
+}
+
 __device__ 
 void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, int32_t* reads_r_offset, int32_t& r_rds_cnt, 
 int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, int64_t& excess_reads, const int idx){
