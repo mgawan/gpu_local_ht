@@ -136,11 +136,12 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
     cstr_type read;
     cstr_type qual;
     uint32_t running_sum_len = 0;
-    if(DEBUG_PRINT_GPU)
+    int test = 1;
+    if(DEBUG_PRINT_GPU && idx == test)
         printf("inside_count_mers\n");
     for(int i = 0; i < r_rds_cnt; i++){
         if(DEBUG_PRINT_GPU)
-            printf("first read loop iter:%d\n",i);
+            printf("read loop iter:%d\n",i);
         //TODO: pass idx here
         read.start_ptr = loc_r_reads + running_sum_len;
         qual.start_ptr = loc_r_quals + running_sum_len;
@@ -148,21 +149,27 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
             if(idx == 0){
                 read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i];
                 qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i];
-                if(DEBUG_PRINT_GPU)
-                    printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d\n",rds_count_r_sum[idx], r_rds_cnt, reads_r_offset[0]);
+                if(DEBUG_PRINT_GPU && idx == test)
+                    printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length);
                 }
             else{   
                 read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
                 qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
+                if(DEBUG_PRINT_GPU && idx == test)
+                    printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length);
+                
                 }
             }
         else{
             read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + (i-1)];
             qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + (i-1)];
+            if(DEBUG_PRINT_GPU && idx == test)
+                 printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length);
+                
             }
-        if(DEBUG_PRINT_GPU){
+        if(DEBUG_PRINT_GPU && idx == test){
             printf("mer_len:%d, read_len:%d\n",mer_len, read.length);
-            printf("read:\n");
+            printf("read from idx:%d\n", idx);
             print_mer(read);
           }
         if (mer_len > read.length) // skip the read which is smaller than merlen
@@ -199,7 +206,7 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
     for (int k = 0; k < max_ht_size; k++) {
         if( thrd_loc_ht[k].key.length != EMPTY){
             thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
-            if(DEBUG_PRINT_GPU){
+            if(DEBUG_PRINT_GPU && idx == test){
                 printf("from ht:\n");
                 print_mer(thrd_loc_ht[k].key);
                 printf("MerFreq.ext:%c, MerFreq.count:%d\n",thrd_loc_ht[k].val.ext,thrd_loc_ht[k].val.count);
@@ -268,9 +275,10 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
     //for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
           //TODO: add a check if total number of reads exceeds a certain number/too large, skip that one, may be do this on cpu 
           // to preserve memory on GPU
-          uint32_t mer_len = 21;
-          if(DEBUG_PRINT_GPU)
-            printf("read_count:%d\n",r_rds_cnt);
+          //TODO: need to reinitialize the hashtable after each kmer size is done
+        uint32_t mer_len = 21;
+        if(DEBUG_PRINT_GPU)
+            printf("read_count:%d, idx:%d\n",r_rds_cnt, idx);
         if(r_rds_cnt != 0){    //if count is zero, no need to count
             if(DEBUG_PRINT_GPU)
                 printf("calling count_mers\n");

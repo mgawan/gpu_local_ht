@@ -136,7 +136,7 @@ int main (int argc, char* argv[]){
     int max_mer_len = 22;
     if(DEBUG_PRINT_CPU)
         print_vals("Calling Kernel...");
-    iterative_walks_kernel<<<1,1>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
+    iterative_walks_kernel<<<1,2>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
     depth_d, d_ht, max_mer_len, 22, 0, term_counts_d, 0, 0, 0, max_read_size, max_read_count);
 
     CUDA_CHECK(cudaFree(term_counts_d));

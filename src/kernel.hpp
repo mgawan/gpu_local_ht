@@ -56,7 +56,7 @@ struct ExtCounts {
 //TODO: replacing numeric_limits by either a suitable constant/predefined value or find a device alternate, check if this is correct with Steve
   __device__
   void inc(char ext, int count) {
-    printf("******inc called******\n");
+  //  printf("******inc called******\n");
     switch (ext) {
       case 'A':
         count += count_A;
