@@ -42,10 +42,24 @@ int main (int argc, char* argv[]){
     int32_t *quals_r_offset_h = new int32_t[total_r_reads];
     int64_t *term_counts_h = new int64_t[3];
 
+    int max_mer_len = 22;
+
+    //compute total device memory required:
+    size_t total_dev_mem = sizeof(int32_t) * vec_size * 4 + sizeof(int32_t) * total_l_reads
+                           + sizeof(int32_t) * total_r_reads + sizeof(char) * max_ctg_size * vec_size
+                           + sizeof(char) * total_l_reads * max_read_size + sizeof(char) * total_r_reads * max_read_size
+                           + sizeof(double) * vec_size + sizeof(char) * total_r_reads * max_read_size 
+                           + sizeof(char) * total_l_reads * max_read_size + sizeof(int64_t)*3
+                           + sizeof(loc_ht)*(max_read_size*max_read_count)*vec_size
+                           + sizeof(char)*vec_size * MAX_WALK_LEN
+                           + (max_mer_len + MAX_WALK_LEN) * sizeof(char) * vec_size;
+    print_vals("Total GPU Mem. requested:", total_dev_mem);
+
     //device allocations for loc_assm_data
     int32_t *cid_d, *ctg_seq_offsets_d, *reads_l_offset_d, *reads_r_offset_d; 
     int32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d;
     char *ctg_seqs_d, *reads_left_d, *reads_right_d, *quals_left_d, *quals_right_d;
+    char *longest_walks_d, *mer_walk_temp_d;
     double *depth_d;
     int64_t *term_counts_d;
     loc_ht *d_ht;
@@ -68,8 +82,12 @@ int main (int argc, char* argv[]){
     // one local hashtable for each thread, so total hash_tables equal to vec_size i.e. total contigs
     // TODO: to account for overfilling of the hashtable, consider assuming load factor of 0.8 and add a cushion of memory in hashtable
     CUDA_CHECK(cudaMalloc(&d_ht, sizeof(loc_ht)*(max_read_size*max_read_count)*vec_size)); 
+    //TODO: come back to this and see if we can find a better approximation of longest walk size
+    CUDA_CHECK(cudaMalloc(&longest_walks_d, sizeof(char)*vec_size * MAX_WALK_LEN));
+    CUDA_CHECK(cudaMalloc(&mer_walk_temp_d, (max_mer_len + MAX_WALK_LEN) * sizeof(char) * vec_size));
 
 
+    
 
     //convert the loc_assem data to primitive structures for device
     int32_t ctgs_offset_sum = 0;
@@ -133,11 +151,11 @@ int main (int argc, char* argv[]){
 
     //call kernel here, one thread per contig
     unsigned total_threads = vec_size;
-    int max_mer_len = 22;
+    
     if(DEBUG_PRINT_CPU)
         print_vals("Calling Kernel...");
     iterative_walks_kernel<<<1,2>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
-    depth_d, d_ht, max_mer_len, 22, 0, term_counts_d, 0, 0, 0, max_read_size, max_read_count);
+    depth_d, d_ht, max_mer_len, 22, 0, term_counts_d, 0, 0, 0, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d);
 
     CUDA_CHECK(cudaFree(term_counts_d));
     if(DEBUG_PRINT_CPU)

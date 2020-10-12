@@ -20,6 +20,7 @@
 #define LASSM_MIN_VIABLE_DEPTH 0.2
 #define LASSM_MIN_EXPECTED_DEPTH 0.3
 #define LASSM_RATING_THRES 0
+#define MAX_WALK_LEN 370
 
 struct cstr_type{
     char* start_ptr;
@@ -219,4 +220,5 @@ __device__ void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_
 int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qual_offset, int64_t& excess_reads, const int idx);
 __global__ void iterative_walks_kernel(int32_t* cid, int32_t* ctg_offsets, char* contigs, char* reads_l, char* reads_r, char* quals_r, 
 char* quals_l, int32_t* reads_l_offset, int32_t* reads_r_offset, int32_t* rds_count_l_sum, int32_t* rds_count_r_sum, double* ctg_depth, loc_ht* global_ht,
-int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int32_t max_read_size, int32_t max_read_count);
+int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int32_t max_read_size, 
+int32_t max_read_count, char* longest_walks, char* mer_walk_temp);
