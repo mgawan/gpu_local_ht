@@ -5,14 +5,10 @@
 //TODO: add this in a separate file for definitions
 #ifdef DEBUG_GPU
 #define DEBUG_PRINT_GPU 1
-#else
-#define DEBUG_PRINT_GPU 0
 #endif
 
 #ifdef DEBUG_CPU
 #define DEBUG_PRINT_CPU 1
-#else
-#define DEBUG_PRINT_CPU 0
 #endif
 
 #define LASSM_MIN_QUAL 10

@@ -216,7 +216,7 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
         
     }
 
-    if(DEBUG_PRINT_GPU){
+    #ifdef DEBUG_PRINT_GPU
         for (int k = 0; k < max_walk_len; k++) {
         if(thrd_ht_bool[k].key.length != EMPTY){
             printf("from bool ht:\n");
@@ -224,7 +224,7 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
             printf("Bool:%d\n",thrd_ht_bool[k].val);
         }
         }
-    }
+    #endif
     return walk_result;
 }
 
@@ -235,11 +235,15 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
     cstr_type qual;
     uint32_t running_sum_len = 0;
     int test = 0;
+    #ifdef DEBUG_PRINT_GPU
     if(DEBUG_PRINT_GPU && idx == test)
         printf("inside_count_mers\n");
+    #endif
     for(int i = 0; i < r_rds_cnt; i++){
+        #ifdef DEBUG_PRINT_GPU
         if(DEBUG_PRINT_GPU)
             printf("read loop iter:%d\n",i);
+        #endif
         //TODO: pass idx here
         read.start_ptr = loc_r_reads + running_sum_len;
         qual.start_ptr = loc_r_quals + running_sum_len;
@@ -247,29 +251,37 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
             if(idx == 0){
                 read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i];
                 qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i];
+                #ifdef DEBUG_PRINT_GPU
                 if(DEBUG_PRINT_GPU && idx == test)
                     printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length);
+                #endif
                 }
             else{   
                 read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
                 qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
+                #ifdef DEBUG_PRINT_GPU
                 if(DEBUG_PRINT_GPU && idx == test)
                     printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length);
+                #endif
                 
                 }
             }
         else{
             read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + (i-1)];
             qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + (i-1)];
+            #ifdef DEBUG_PRINT_GPU
             if(DEBUG_PRINT_GPU && idx == test)
                  printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length);
+            #endif
                 
             }
+        #ifdef DEBUG_PRINT_GPU
         if(DEBUG_PRINT_GPU && idx == test){
             printf("mer_len:%d, read_len:%d\n",mer_len, read.length);
             printf("read from idx:%d\n", idx);
             print_mer(read);
           }
+          #endif
         if (mer_len > read.length) // skip the read which is smaller than merlen
             continue;
         int num_mers = read.length - mer_len;
@@ -304,6 +316,7 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
     for (int k = 0; k < max_ht_size; k++) {
         if( thrd_loc_ht[k].key.length != EMPTY){
             thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
+            #ifdef DEBUG_PRINT_GPU
             if(DEBUG_PRINT_GPU && idx == test){
                 printf("from ht:\n");
                 print_mer(thrd_loc_ht[k].key);
@@ -311,6 +324,7 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
                 thrd_loc_ht[k].val.hi_q_exts.print();
                 thrd_loc_ht[k].val.low_q_exts.print();
             }
+            #endif
         }
     }
 }
@@ -388,18 +402,18 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
           //TODO: add a check if total number of reads exceeds a certain number/too large, skip that one, may be do this on cpu 
           // to preserve memory on GPU
           //TODO: need to reinitialize the hashtable after each kmer size is done
-        
-    if(DEBUG_PRINT_GPU){
+    #ifdef DEBUG_PRINT_GPU
         printf("read_count:%d, idx:%d\n",r_rds_cnt, idx);
         printf("mer ctg len:%d mer_walk before:\n",loc_mer_walk.length);
         print_mer(loc_mer_walk);
-    }
+    #endif
     if(r_rds_cnt != 0){    //if count is zero, no need to count
-        if(DEBUG_PRINT_GPU)
+        #ifdef DEBUG_PRINT_GPU
             printf("calling count_mers\n");
+        #endif
         count_mers(loc_mer_map, loc_r_reads, max_ht_size, loc_r_quals, reads_r_offset, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads, idx);
         char walk_res = walk_mers(loc_mer_map, loc_bool_map, max_ht_size, mer_len, loc_mer_walk, longest_walk_thread, walk, idx, MAX_WALK_LEN);
-        if(DEBUG_PRINT_GPU){
+        #ifdef DEBUG_PRINT_GPU
             printf("walk:\n");
             print_mer(walk);
             printf("walk len:%d\n", walk.length);
@@ -407,7 +421,7 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
             print_mer(loc_mer_walk);
             printf("mer_walk after, len:%d\n", loc_mer_walk.length);
             printf("walk result:%c\n", walk_res);
-            }
+        #endif
         }
    // }
 
