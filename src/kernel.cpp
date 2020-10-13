@@ -397,8 +397,11 @@ char* reads_l, char* reads_r, char* quals_r, char* quals_l, int32_t* reads_l_off
     // cstr_type longest_walk_thread(longest_walk_loc,0);
     // cstr_type walk(loc_mer_walk.start_ptr + mer_len, 0);
 
+    cstr_type longest_walk_thread(longest_walk_loc,0);
+
     //main for loop
     //TODO: commenting out the main for loop for testing count_mers
+    int shift = 0;
     for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
           //TODO: add a check if total number of reads exceeds a certain number/too large, skip that one, may be do this on cpu 
           // to preserve memory on GPU
@@ -421,7 +424,6 @@ char* reads_l, char* reads_r, char* quals_r, char* quals_l, int32_t* reads_l_off
             cstr_type ctg_mer(loc_ctg.start_ptr + (loc_ctg.length - mer_len), mer_len);
             cstr_type loc_mer_walk(loc_mer_walk_temp, 0);
             cstr_copy(loc_mer_walk, ctg_mer);
-            cstr_type longest_walk_thread(longest_walk_loc,0);
             cstr_type walk(loc_mer_walk.start_ptr + mer_len, 0);
 
             char walk_res = walk_mers(loc_mer_map, loc_bool_map, max_ht_size, mer_len, loc_mer_walk, longest_walk_thread, walk, idx, MAX_WALK_LEN);
@@ -435,14 +437,27 @@ char* reads_l, char* reads_r, char* quals_r, char* quals_l, int32_t* reads_l_off
                 // walk reaches a dead-end, downshift, unless we were upshifting
                 if (shift == LASSM_SHIFT_SIZE) break;
                     shift = -LASSM_SHIFT_SIZE;
-            } 
+            }else {
+                if (walk_res == 'F') 
+                    atomicAdd(&term_counts[1], 1);
+                else 
+                    atomicAdd(&term_counts[2], 1);
+                // otherwise walk must end with a fork or repeat, so upshift
+                if (shift == -LASSM_SHIFT_SIZE)
+                    break;
+                if (mer_len > loc_ctg.length)
+                    break;
+                shift = LASSM_SHIFT_SIZE;
+            }
 
         }
     }
+    if(longest_walk_thread.length > 0){
+        ctg_offsets[idx] = longest_walk_thread.length;
+        atomicAdd(num_walks, 1);
+        atomicAdd(sum_ext, longest_walk_thread.length);
+    }
 
-
-          //  cstr_copy(longest_walk_thread, walk); // copying longest walk to result array
-           // ctg_offsets[idx] = longest_walk_thread.length; // saving longest walk length for copy back to device, reusing contig offsets memory
     #ifdef DEBUG_PRINT_GPU
         printf("walk:\n");
         print_mer(walk);
