@@ -216,37 +216,17 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
         
     }
 
+    if(DEBUG_PRINT_GPU){
+        for (int k = 0; k < max_walk_len; k++) {
+        if(thrd_ht_bool[k].key.length != EMPTY){
+            printf("from bool ht:\n");
+            print_mer(thrd_ht_bool[k].key);
+            printf("Bool:%d\n",thrd_ht_bool[k].val);
+        }
+        }
+    }
     return walk_result;
 }
-// // return the result of the walk (f, r or x)
-// static char walk_mers(MerMap &mers_ht, string &mer, string &walk, int mer_len, int walk_len_limit) {
-//   HASH_TABLE<string, bool> loop_check_ht;
-//   char walk_result = 'X';
-//   for (int nsteps = 0; nsteps < walk_len_limit; nsteps++) {
-//     if (!(nsteps % 10)) progress();
-//     // check for a cycle in the graph
-//     if (loop_check_ht.find(mer) != loop_check_ht.end()) {
-//       walk_result = 'R';
-//       break;
-//     } else {
-//       loop_check_ht.insert({mer, true});
-//     }
-//     auto it = mers_ht.find(mer);
-//     if (it == mers_ht.end()) {
-//       walk_result = 'X';
-//       break;
-//     }
-//     char ext = it->second.ext;
-//     if (ext == 'F' || ext == 'X') {
-//       walk_result = ext;
-//       break;
-//     }
-//     mer.erase(0, 1);
-//     mer += ext;
-//     walk += ext;
-//   }
-//   return walk_result;
-// }
 
 __device__ 
 void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, int32_t* reads_r_offset, int32_t& r_rds_cnt, 
