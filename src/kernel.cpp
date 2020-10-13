@@ -11,7 +11,7 @@ __device__ void print_mer(cstr_type& mer){
 
 __device__ void cstr_copy(cstr_type& str1, cstr_type& str2){
 
-    for(int i = 0; i < str1.length; i++){
+    for(int i = 0; i < str2.length; i++){
         str1.start_ptr[i] = str2.start_ptr[i];
     }
     str1.length = str2.length;
@@ -183,24 +183,24 @@ loc_ht_bool& ht_get(loc_ht_bool* thread_ht, cstr_type kmer_key, uint32_t max_siz
 
 //TODO: intialize the bool table in kernel main
 //TODO: check if we need longest walk in this function
-__device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32_t max_ht_size, uint32_t& mer_len, char* mer_walk_temp, char* longest_walk, const int idx, int max_walk_len){
+__device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32_t max_ht_size, uint32_t& mer_len, cstr_type& mer_walk_temp, cstr_type& longest_walk, cstr_type& walk, const int idx, int max_walk_len){
     char walk_result = 'X';
     int walk_length = 0;
-    cstr_type mer(mer_walk_temp, mer_len);
-    cstr_type walk(mer_walk_temp + mer_len, walk_length); // walk pointer starts at the end of initial mer pointer
+    //cstr_type mer(mer_walk_temp, mer_len);
+    //cstr_type walk(mer_walk_temp + mer_len, walk_length); // walk pointer starts at the end of initial mer pointer
 
     for( int nsteps = 0; nsteps < max_walk_len; nsteps++){
         //check if there is a cycle in graph
-        loc_ht_bool &temp_mer_loop = ht_get(thrd_ht_bool, mer, max_walk_len);
+        loc_ht_bool &temp_mer_loop = ht_get(thrd_ht_bool, mer_walk_temp, max_walk_len);
         if(temp_mer_loop.key.length == EMPTY){ // if the mer has not been visited, add it to the table and mark visited
-            temp_mer_loop.key = mer;
+            temp_mer_loop.key = mer_walk_temp;
             temp_mer_loop.val = true;
         }else{
             walk_result = 'R'; // if the table already contains this mer then a cycle exits, return the walk with repeat.
             break;
         }
 
-        loc_ht &temp_mer = ht_get(thrd_loc_ht, mer, max_ht_size);
+        loc_ht &temp_mer = ht_get(thrd_loc_ht, mer_walk_temp, max_ht_size);
         if(temp_mer.key.length == EMPTY){//if mer is not found then dead end reached, terminate the walk
             walk_result = 'X';
             break;
@@ -210,8 +210,8 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
             walk_result = ext;
             break;
         }
-        mer.start_ptr = mer.start_ptr + 1; // increment the mer pointer and append the ext
-        mer.start_ptr[mer.length-1] = ext; // walk pointer points at the end of initial mer point.
+        mer_walk_temp.start_ptr = mer_walk_temp.start_ptr + 1; // increment the mer pointer and append the ext
+        mer_walk_temp.start_ptr[mer_walk_temp.length-1] = ext; // walk pointer points at the end of initial mer point.
         walk.length++;
         
     }
@@ -254,7 +254,7 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
     cstr_type read;
     cstr_type qual;
     uint32_t running_sum_len = 0;
-    int test = 1;
+    int test = 0;
     if(DEBUG_PRINT_GPU && idx == test)
         printf("inside_count_mers\n");
     for(int i = 0; i < r_rds_cnt; i++){
@@ -348,10 +348,15 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
     double loc_ctg_depth = ctg_depth[idx];
     int64_t excess_reads;
     uint32_t qual_offset = 0, max_ht_size = max_read_size * max_read_count;
-    char* loc_mer_walk_temp = mer_walk_temp + idx*MAX_WALK_LEN;
+    char* loc_mer_walk_temp = mer_walk_temp + idx * (MAX_WALK_LEN + max_mer_len);
+    char* longest_walk_loc = longest_walks + idx * MAX_WALK_LEN;
 
     for(uint32_t k = 0; k < max_ht_size; k++){
         loc_mer_map[k].key.length = EMPTY;
+    }
+
+    for(uint32_t k = 0; k < MAX_WALK_LEN; k++){
+        loc_bool_map[k].key.length = EMPTY;
     }
     //TODO: initalize hash table find a faster way of doing this
 
@@ -389,8 +394,13 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
         else
             loc_l_quals = quals_l + reads_l_offset[rds_count_l_sum[idx - 1] - 1]; // you want to start from where previous contigs, last read ends. 
     }
-
-    cstr_copy(loc_mer_walk_temp, loc_ctg);
+    uint32_t mer_len = 21;
+    cstr_type ctg_mer(loc_ctg.start_ptr + (loc_ctg.length - mer_len), mer_len);
+    cstr_type loc_mer_walk(loc_mer_walk_temp, 0);
+    cstr_copy(loc_mer_walk, ctg_mer);
+    cstr_type longest_walk_thread(longest_walk_loc,0);
+    cstr_type walk(loc_mer_walk.start_ptr + mer_len, 0);
+    //cstr_type walk(mer_walk_temp + mer_len, walk_length);
 
     //main for loop
     //TODO: commenting out the main for loop for testing count_mers
@@ -398,15 +408,27 @@ int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t
           //TODO: add a check if total number of reads exceeds a certain number/too large, skip that one, may be do this on cpu 
           // to preserve memory on GPU
           //TODO: need to reinitialize the hashtable after each kmer size is done
-        uint32_t mer_len = 21;
+        
+    if(DEBUG_PRINT_GPU){
+        printf("read_count:%d, idx:%d\n",r_rds_cnt, idx);
+        printf("mer ctg len:%d mer_walk before:\n",loc_mer_walk.length);
+        print_mer(loc_mer_walk);
+    }
+    if(r_rds_cnt != 0){    //if count is zero, no need to count
         if(DEBUG_PRINT_GPU)
-            printf("read_count:%d, idx:%d\n",r_rds_cnt, idx);
-        if(r_rds_cnt != 0){    //if count is zero, no need to count
-            if(DEBUG_PRINT_GPU)
-                printf("calling count_mers\n");
-            count_mers(loc_mer_map, loc_r_reads, max_ht_size, loc_r_quals, reads_r_offset, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads, idx);
-            __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32_t max_ht_size, uint32_t& mer_len, char* mer_walk_temp, char* longest_walk, const int idx, int max_walk_len);
+            printf("calling count_mers\n");
+        count_mers(loc_mer_map, loc_r_reads, max_ht_size, loc_r_quals, reads_r_offset, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads, idx);
+        char walk_res = walk_mers(loc_mer_map, loc_bool_map, max_ht_size, mer_len, loc_mer_walk, longest_walk_thread, walk, idx, MAX_WALK_LEN);
+        if(DEBUG_PRINT_GPU){
+            printf("walk:\n");
+            print_mer(walk);
+            printf("walk len:%d\n", walk.length);
+            printf("mer_walk after:\n");
+            print_mer(loc_mer_walk);
+            printf("mer_walk after, len:%d\n", loc_mer_walk.length);
+            printf("walk result:%c\n", walk_res);
             }
+        }
    // }
 
 }
