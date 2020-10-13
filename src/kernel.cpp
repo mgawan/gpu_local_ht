@@ -89,6 +89,25 @@ __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, MerFreqs mer_va
 
     }
 }
+//overload for bool vals
+__device__ void ht_insert(loc_ht_bool* thread_ht, cstr_type kmer_key, bool bool_val, uint32_t max_size){
+    unsigned hash_val = hash_func(kmer_key, max_size);
+    unsigned orig_hash = hash_val;
+    //int count = 0; // for debugging
+    while(true){
+        int if_empty = thread_ht[hash_val].key.length; // length is set to some unimaginable number to indicate if its empty
+        if(if_empty == EMPTY){ //the case where there is a key but no val, will not happen
+
+           // printf("hash_val:%d, orig_hash:%d, attemp:%d\n",hash_val, orig_hash, count); // for debugging
+            thread_ht[hash_val].key = kmer_key;
+            thread_ht[hash_val].val = bool_val;
+            return;
+        }
+        hash_val = (hash_val +1 ) % max_size;//(hash_val + 1) & (HT_SIZE-1);
+        //count++; //for debugging
+
+    }
+}
 
 // __device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key){
 //     int hash_val = hash_func(kmer_key);
@@ -128,11 +147,97 @@ loc_ht& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
 
 }
 
-
-
-__device__ void walk_mers(loc_ht* thrd_loc_ht, uint32_t max_ht_size, uint32_t& mer_len, char* mer_walk_temp, char* longest_walk, const int idx){
+//TODO:use some OOP technique for implementing the bool table, may be inheritence?
+//overload for bool vals
+__device__ 
+loc_ht_bool& ht_get(loc_ht_bool* thread_ht, cstr_type kmer_key, uint32_t max_size){
+    unsigned hash_val = hash_func(kmer_key, max_size);
+    unsigned orig_hash = hash_val;
     
+    while(true){
+        if(thread_ht[hash_val].key.length == EMPTY){
+            return thread_ht[hash_val];
+        }
+        else if(thread_ht[hash_val].key == kmer_key){
+            //printf("key found, returning\n");// keep this for debugging
+            return thread_ht[hash_val];
+        }
+        hash_val = (hash_val +1 ) %max_size;//hash_val = (hash_val + 1) & (HT_SIZE -1);
+        if(hash_val == orig_hash){ // loop till you reach the same starting positions and then return error
+            printf("*****end reached, hashtable full*****\n"); // for debugging
+            printf("*****end reached, hashtable full*****\n");
+            printf("*****end reached, hashtable full*****\n");
+           // return loc_ht(cstr_type(NULL,-1), MerFreqs());
+        }
+    }
+
 }
+
+//TODO: intialize the bool table in kernel main
+__device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32_t max_ht_size, uint32_t& mer_len, char* mer_walk_temp, char* longest_walk, const int idx, int max_walk_len){
+    char walk_result = 'X';
+    int walk_length = 0;
+    cstr_type mer(mer_walk_temp, mer_len);
+    cstr_type walk(mer_walk_temp + mer_len, walk_length); // walk pointer starts at the end of initial mer pointer
+
+    for( int nsteps = 0; nsteps < max_walk_len; nsteps++){
+        //check if there is a cycle in graph
+        loc_ht_bool &temp_mer_loop = ht_get(thrd_ht_bool, mer, max_walk_len);
+        if(temp_mer_loop.key.length == EMPTY){ // if the mer has not been visited, add it to the table and mark visited
+            temp_mer_loop.key = mer;
+            temp_mer_loop.val = true;
+        }else{
+            walk_result = 'R'; // if the table already contains this mer then a cycle exits, return the walk with repeat.
+            break;
+        }
+
+        loc_ht &temp_mer = ht_get(thrd_loc_ht, mer, max_ht_size);
+        if(temp_mer.key.length == EMPTY){//if mer is not found then dead end reached, terminate the walk
+            walk_result = 'X';
+            break;
+        }
+        char ext = temp_mer.val.ext;
+        if(ext == 'F' || ext == 'X'){ // if the table points that ext is fork or dead end the terminate the walk
+            walk_result = ext;
+            break;
+        }
+        mer.start_ptr = mer.start_ptr + 1; // increment the mer pointer and append the ext
+        mer.start_ptr[mer.length-1] = ext; // walk pointer points at the end of initial mer point.
+        walk.length++;
+        
+    }
+    
+    return walk_result;
+}
+// // return the result of the walk (f, r or x)
+// static char walk_mers(MerMap &mers_ht, string &mer, string &walk, int mer_len, int walk_len_limit) {
+//   HASH_TABLE<string, bool> loop_check_ht;
+//   char walk_result = 'X';
+//   for (int nsteps = 0; nsteps < walk_len_limit; nsteps++) {
+//     if (!(nsteps % 10)) progress();
+//     // check for a cycle in the graph
+//     if (loop_check_ht.find(mer) != loop_check_ht.end()) {
+//       walk_result = 'R';
+//       break;
+//     } else {
+//       loop_check_ht.insert({mer, true});
+//     }
+//     auto it = mers_ht.find(mer);
+//     if (it == mers_ht.end()) {
+//       walk_result = 'X';
+//       break;
+//     }
+//     char ext = it->second.ext;
+//     if (ext == 'F' || ext == 'X') {
+//       walk_result = ext;
+//       break;
+//     }
+//     mer.erase(0, 1);
+//     mer += ext;
+//     walk += ext;
+//   }
+//   return walk_result;
+// }
 
 __device__ 
 void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, int32_t* reads_r_offset, int32_t& r_rds_cnt, 
@@ -188,7 +293,7 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
             loc_ht &temp_Mer = ht_get(thrd_loc_ht, mer, max_ht_size);
             if(temp_Mer.key.length == EMPTY){
                 temp_Mer.key = mer;
-                temp_Mer.val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0}; // TODO: verify that this constructor works on GPU
+                temp_Mer.val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0};
             }
             int ext_pos = start + mer_len;
           //  assert(ext_pos < (int)read.length); // TODO: verify that assert works on gpu, for now commenting it out and replacing with printf
@@ -223,13 +328,14 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, uint32_t& mer_len, uint32_t& qu
 
 //same kernel will be used for right and left walks
 __global__ void iterative_walks_kernel(int32_t* cid, int32_t* ctg_offsets, char* contigs, 
-char* reads_l, char* reads_r, char* quals_r, char* quals_l, int32_t* reads_l_offset, int32_t* reads_r_offset, int32_t* rds_count_l_sum, int32_t* rds_count_r_sum, double* ctg_depth, loc_ht* global_ht,
+char* reads_l, char* reads_r, char* quals_r, char* quals_l, int32_t* reads_l_offset, int32_t* reads_r_offset, int32_t* rds_count_l_sum, int32_t* rds_count_r_sum, double* ctg_depth, loc_ht* global_ht, loc_ht_bool* global_ht_bool,
 int max_mer_len, int kmer_len, int walk_len_limit, int64_t *term_counts, int64_t num_walks, int64_t max_walk_len, int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_walks, char* mer_walk_temp){
     const int idx = threadIdx.x + blockIdx.x * gridDim.x;
     cstr_type loc_ctg;
     char *loc_r_reads, *loc_l_reads, *loc_r_quals, *loc_l_quals;
     int32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
     loc_ht* loc_mer_map = global_ht + idx * max_read_size * max_read_count;
+    loc_ht_bool* loc_bool_map = global_ht_bool + idx * max_walk_len;
     double loc_ctg_depth = ctg_depth[idx];
     int64_t excess_reads;
     uint32_t qual_offset = 0, max_ht_size = max_read_size * max_read_count;

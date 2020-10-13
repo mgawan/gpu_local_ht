@@ -63,6 +63,7 @@ int main (int argc, char* argv[]){
     double *depth_d;
     int64_t *term_counts_d;
     loc_ht *d_ht;
+    loc_ht_bool *d_ht_bool;
 
     CUDA_CHECK(cudaMalloc(&cid_d, sizeof(int32_t) * vec_size));
     CUDA_CHECK(cudaMalloc(&ctg_seq_offsets_d, sizeof(int32_t) * vec_size));
@@ -85,6 +86,7 @@ int main (int argc, char* argv[]){
     //TODO: come back to this and see if we can find a better approximation of longest walk size
     CUDA_CHECK(cudaMalloc(&longest_walks_d, sizeof(char)*vec_size * MAX_WALK_LEN));
     CUDA_CHECK(cudaMalloc(&mer_walk_temp_d, (max_mer_len + MAX_WALK_LEN) * sizeof(char) * vec_size));
+    CUDA_CHECK(cudaMalloc(&d_ht_bool, sizeof(loc_ht_bool) * vec_size * MAX_WALK_LEN));
 
 
     
@@ -155,7 +157,7 @@ int main (int argc, char* argv[]){
     if(DEBUG_PRINT_CPU)
         print_vals("Calling Kernel...");
     iterative_walks_kernel<<<1,2>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
-    depth_d, d_ht, max_mer_len, 22, 0, term_counts_d, 0, 0, 0, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d);
+    depth_d, d_ht, d_ht_bool, max_mer_len, 22, 0, term_counts_d, 0, 0, 0, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d);
 
     CUDA_CHECK(cudaFree(term_counts_d));
     if(DEBUG_PRINT_CPU)
