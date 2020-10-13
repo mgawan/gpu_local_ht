@@ -21,7 +21,7 @@ int main (int argc, char* argv[]){
     int32_t vec_size = data_in.size();
     #ifdef DEBUG_PRINT_CPU
         print_vals("max_l_count:",max_l_count,"max_r_count:", max_r_count);
-        print_loc_data(&data_in);
+       // print_loc_data(&data_in);
     #endif
     int32_t max_read_count = max_r_count>max_l_count ? max_r_count : max_l_count;
 
@@ -41,6 +41,7 @@ int main (int argc, char* argv[]){
     int32_t *quals_l_offset_h = new int32_t[total_l_reads];
     int32_t *quals_r_offset_h = new int32_t[total_r_reads];
     int64_t *term_counts_h = new int64_t[3];
+    char* longest_walks_h = new char[vec_size * MAX_WALK_LEN];
 
     int max_mer_len = 22;
 
@@ -155,11 +156,40 @@ int main (int argc, char* argv[]){
     //call kernel here, one thread per contig
     unsigned total_threads = vec_size;
     
-    #ifdef DEBUG_PRINT_CPU
-        print_vals("Calling Kernel...");
-    #endif
-    iterative_walks_kernel<<<1,1>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
+
+    print_vals("Calling Kernel with threads:", vec_size);
+
+    iterative_walks_kernel<<<1,vec_size>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
     depth_d, d_ht, d_ht_bool, max_mer_len, 22, 0, term_counts_d, 0, 0, 0, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d);
+
+    print_vals("Device to Host Transfer...");
+    
+    CUDA_CHECK(cudaMemcpy(longest_walks_h, longest_walks_d, sizeof(char) * vec_size * MAX_WALK_LEN, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(ctg_seq_offsets_h, ctg_seq_offsets_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); // ctg offset memory wil be reused for copying back longest lengths
+
+    #ifdef DEBUG_PRINT_CPU
+        print_vals("longest walk for contig 0 has length:", ctg_seq_offsets_h[0]);
+        for(int i = 0; i < ctg_seq_offsets_h[0]; i++){
+            std::cout<<longest_walks_h[i];
+        }
+        std::cout<<std::endl;
+        print_vals("longest walk for contig 1 has length:", ctg_seq_offsets_h[1]);
+        for(int i = 0; i < ctg_seq_offsets_h[1]; i++){
+            std::cout<<longest_walks_h[MAX_WALK_LEN*1 + i];
+        }
+        std::cout<<std::endl;
+
+        print_vals("longest walk for contig 2 has length:", ctg_seq_offsets_h[2]);
+        for(int i = 0; i < ctg_seq_offsets_h[2]; i++){
+            std::cout<<longest_walks_h[MAX_WALK_LEN*2 + i];
+        }
+        std::cout<<std::endl;
+        print_vals("longest walk for contig 3 has length:", ctg_seq_offsets_h[3]);
+        for(int i = 0; i < ctg_seq_offsets_h[3]; i++){
+            std::cout<<longest_walks_h[MAX_WALK_LEN*3 + i];
+        }
+        std::cout<<std::endl;
+    #endif
 
     CUDA_CHECK(cudaFree(term_counts_d));
     //if(DEBUG_PRINT_CPU)

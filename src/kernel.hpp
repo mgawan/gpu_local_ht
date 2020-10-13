@@ -1,7 +1,7 @@
 #include<stdio.h>
 #include <iostream>
 #define EMPTY 0xFFFFFFFF
-//#define HT_SIZE 300
+
 //TODO: add this in a separate file for definitions
 #ifdef DEBUG_GPU
 #define DEBUG_PRINT_GPU 1
@@ -17,6 +17,8 @@
 #define LASSM_MIN_EXPECTED_DEPTH 0.3
 #define LASSM_RATING_THRES 0
 #define MAX_WALK_LEN 370
+#define LASSM_MIN_KMER_LEN 21
+#define LASSM_SHIFT_SIZE 8
 
 struct cstr_type{
     char* start_ptr;
