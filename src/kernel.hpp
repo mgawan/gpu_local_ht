@@ -44,6 +44,8 @@ struct cstr_type{
     }
 };
 
+__device__ void cstr_copy(cstr_type& str1, cstr_type& str2);
+
 struct ExtCounts {
   uint16_t count_A;
   uint16_t count_C;
