@@ -158,9 +158,11 @@ int main (int argc, char* argv[]){
     
 
     print_vals("Calling Kernel with threads:", vec_size);
+    int64_t sum_ext, num_walks;
 
     iterative_walks_kernel<<<1,vec_size>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
-    depth_d, d_ht, d_ht_bool, max_mer_len, 22, 0, term_counts_d, 0, 0, 0, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d);
+    depth_d, d_ht, d_ht_bool, 22, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d);
+
 
     print_vals("Device to Host Transfer...");
     
