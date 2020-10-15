@@ -40,10 +40,10 @@ int main (int argc, char* argv[]){
     int32_t *rds_r_cnt_offset_h = new int32_t[vec_size];
     int32_t *quals_l_offset_h = new int32_t[total_l_reads];
     int32_t *quals_r_offset_h = new int32_t[total_r_reads];
-    int64_t *term_counts_h = new int64_t[3];
+    int32_t *term_counts_h = new int32_t[3];
     char* longest_walks_h = new char[vec_size * MAX_WALK_LEN];
 
-    int max_mer_len = 22;
+    int max_mer_len = 21;
 
     //compute total device memory required:
     size_t total_dev_mem = sizeof(int32_t) * vec_size * 4 + sizeof(int32_t) * total_l_reads
@@ -62,7 +62,7 @@ int main (int argc, char* argv[]){
     char *ctg_seqs_d, *reads_left_d, *reads_right_d, *quals_left_d, *quals_right_d;
     char *longest_walks_d, *mer_walk_temp_d;
     double *depth_d;
-    int64_t *term_counts_d;
+    int32_t *term_counts_d;
     loc_ht *d_ht;
     loc_ht_bool *d_ht_bool;
 
@@ -151,7 +151,7 @@ int main (int argc, char* argv[]){
     CUDA_CHECK(cudaMemcpy(depth_d, depth_h, sizeof(double) * vec_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(quals_right_d, quals_right_h, sizeof(char) * total_r_reads * max_read_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(quals_left_d, quals_left_h, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(term_counts_d, term_counts_h, sizeof(int64_t)*3, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(term_counts_d, term_counts_h, sizeof(int32_t)*3, cudaMemcpyHostToDevice));
 
     //call kernel here, one thread per contig
     unsigned total_threads = vec_size;
@@ -161,7 +161,7 @@ int main (int argc, char* argv[]){
     int64_t sum_ext, num_walks;
 
     iterative_walks_kernel<<<1,vec_size>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
-    depth_d, d_ht, d_ht_bool, 22, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d);
+    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d);
 
 
     print_vals("Device to Host Transfer...");
