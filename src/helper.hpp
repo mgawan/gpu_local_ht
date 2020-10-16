@@ -104,3 +104,22 @@ inline void revcomp(char* str, char* str_rc, int size) {
     size_rc++;
   }
 }
+
+inline std::string revcomp(std::string instr) {
+  std::string str_rc;
+  for (int i = instr.size() - 1; i >= 0; i--) {
+    switch (instr[i]) {
+      case 'A': str_rc += 'T'; break;
+      case 'C': str_rc += 'G'; break;
+      case 'G': str_rc += 'C'; break;
+      case 'T': str_rc += 'A'; break;
+      case 'N': str_rc += 'N'; break;
+      case 'U': case 'R': case 'Y': case 'K': case 'M': case 'S': case 'W': case 'B': case 'D': case 'H': case 'V':
+        str_rc += 'N';
+        break;
+      default:
+        print_vals("Illegal char", instr[i], "in revcomp of ");
+    }
+  }
+  return str_rc;
+}

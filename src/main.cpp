@@ -4,6 +4,7 @@
 #include <random>
 #include <algorithm>
 #include <cstring>
+#include <fstream>
 #include "helper.hpp"
 #include "kernel.hpp"
 #define TOT_THREADS 1
@@ -15,6 +16,7 @@
 // and contigs with only left are launched in left kernels.
 int main (int argc, char* argv[]){
     std::string in_file = argv[1];
+    std::string out_file = argv[2];
     std::vector<CtgWithReads> data_in;
     int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size,max_r_count, max_l_count);
@@ -328,6 +330,20 @@ int main (int argc, char* argv[]){
     #endif
     
     CUDA_CHECK(cudaFree(term_counts_d));
+    //adding pre and post walks in strings and printing the results out in a file.
+    std::ofstream ofile(out_file);
+    for(int i = 0; i< vec_size; i++){
+        if(final_walk_lens_l_h[i] != 0){
+            std::string left(&longest_walks_l_h[MAX_WALK_LEN*i],final_walk_lens_l_h[i]);
+            std::string left_rc = revcomp(left);
+            data_in[i].seq.insert(0,left_rc);  
+        }
+        if(final_walk_lens_r_h[i] != 0){
+            std::string right(&longest_walks_r_h[MAX_WALK_LEN*i],final_walk_lens_r_h[i]);
+            data_in[i].seq += right;
+        }
+        ofile << data_in[i].cid<<"\t"<<data_in[i].seq<<std::endl;
+    }
 
     gpu_total.timer_end();
     print_vals("Total Time:", gpu_total.get_total_time() );

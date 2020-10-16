@@ -1,23 +1,5 @@
 #include "kernel.hpp"
 
-__device__ void revcomp_dev(cstr_type& seq, cstr_type& seq_rc){
-  //string seq_rc = "";
-  for (int i = seq.length - 1; i >= 0; i--) {
-    switch (seq.start_ptr[i]) {
-      case 'A': seq_rc.start_ptr[seq_rc.length] = 'T'; break;
-      case 'C': seq_rc.start_ptr[seq_rc.length] = 'G'; break;
-      case 'G': seq_rc.start_ptr[seq_rc.length] = 'C'; break;
-      case 'T': seq_rc.start_ptr[seq_rc.length] = 'A'; break;
-      case 'N': seq_rc.start_ptr[seq_rc.length] = 'N'; break;
-      case 'U': case 'R': case 'Y': case 'K': case 'M': case 'S': case 'W': case 'B': case 'D': case 'H': case 'V':
-        seq_rc.start_ptr[seq_rc.length]= 'N';
-        break;
-      default:
-        printf("*********Illegal Character in revcomp****************\n");
-    }
-    seq_rc.length++;
-  }
-}
 
 //TODO: all the hashtable entries need to be set to empty, figure that out
 __device__ void print_mer(cstr_type& mer){
