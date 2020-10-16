@@ -364,8 +364,9 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_of
 __global__ void iterative_walks_kernel(int32_t* cid, int32_t* ctg_offsets, char* contigs, 
 char* reads_l, char* reads_r, char* quals_r, char* quals_l, int32_t* reads_l_offset, int32_t* reads_r_offset, int32_t* rds_count_l_sum, int32_t* rds_count_r_sum, 
 double* ctg_depth, loc_ht* global_ht, loc_ht_bool* global_ht_bool, int kmer_len, int32_t *term_counts, int64_t num_walks, int64_t max_walk_len, 
-int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_walks, char* mer_walk_temp, int* final_walk_lens){
-    const int idx = threadIdx.x + blockIdx.x * gridDim.x;
+int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_walks, char* mer_walk_temp, int* final_walk_lens, int tot_ctgs){
+    const int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if(idx < tot_ctgs){
     cstr_type loc_ctg;
     char *loc_r_reads, *loc_l_reads, *loc_r_quals, *loc_l_quals;
     int32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
@@ -518,5 +519,5 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_wa
         }
         //printf("walk result:%c\n", walk_res);
     #endif
-
+}//end if to check if idx exceeds contigs
 }

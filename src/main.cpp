@@ -21,10 +21,6 @@ int main (int argc, char* argv[]){
     int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size,max_r_count, max_l_count);
     int32_t vec_size = data_in.size();
-    #ifdef DEBUG_PRINT_CPU
-        print_vals("max_l_count:",max_l_count,"max_r_count:", max_r_count);
-       // print_loc_data(&data_in);
-    #endif
     int32_t max_read_count = max_r_count>max_l_count ? max_r_count : max_l_count;
 
     //host allocations for converting loc_assm_data to prim types
@@ -49,7 +45,7 @@ int main (int argc, char* argv[]){
     int* final_walk_lens_r_h = new int[vec_size];
     int* final_walk_lens_l_h = new int[vec_size]; // not needed on device, will re use right walk memory
 
-    int max_mer_len = 21;
+    int max_mer_len = 33;
 
     //compute total device memory required:
     size_t total_dev_mem = sizeof(int32_t) * vec_size * 4 + sizeof(int32_t) * total_l_reads
@@ -62,6 +58,11 @@ int main (int argc, char* argv[]){
                            + (max_mer_len + MAX_WALK_LEN) * sizeof(char) * vec_size
                            + sizeof(int) * vec_size;
     print_vals("Total GPU Mem. (MB) requested:", (double)total_dev_mem/(1024*1024));
+    print_vals("Total Contigs:", vec_size);
+    print_vals("max_l_count:",max_l_count,"max_r_count:", max_r_count);
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+    print_vals("GPU Mem Avail (MB):", (double)prop.totalGlobalMem/(1024*1024));
 
     timer gpu_total;
     gpu_total.timer_start();
@@ -109,6 +110,7 @@ int main (int argc, char* argv[]){
     int read_l_index = 0, read_r_index = 0;
     timer data_packing;
     data_packing.timer_start();
+
     for(int i = 0; i < data_in.size(); i++){
         CtgWithReads temp_data = data_in[i];
         cid_h[i] = temp_data.cid;
@@ -174,15 +176,17 @@ int main (int argc, char* argv[]){
 
     //call kernel here, one thread per contig
     unsigned total_threads = vec_size;
+    unsigned thread_per_blk = 512;
+    unsigned blocks = (vec_size + thread_per_blk)/thread_per_blk;
     
 
-    print_vals("Calling Kernel with threads:", vec_size);
+    print_vals("Calling Kernel with blocks:", blocks, "Threads:", thread_per_blk);
     int64_t sum_ext, num_walks;
     timer kernel_time;
 
     kernel_time.timer_start();
-    iterative_walks_kernel<<<1,vec_size>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
-    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d);
+    iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
+    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
     CUDA_CHECK(cudaDeviceSynchronize());
     kernel_time.timer_end();
     double right_kernel_time = kernel_time.get_total_time();
@@ -276,8 +280,8 @@ int main (int argc, char* argv[]){
     transfer_time += gpu_transfer.get_total_time();
     // launching kernel by swapping right and left reads, TODO: make this correct
     kernel_time.timer_start();
-    iterative_walks_kernel<<<1,vec_size>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_right_d, reads_left_d, quals_left_d, quals_right_d, reads_r_offset_d, reads_l_offset_d, rds_r_cnt_offset_d, rds_l_cnt_offset_d, 
-    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d);
+    iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_right_d, reads_left_d, quals_left_d, quals_right_d, reads_r_offset_d, reads_l_offset_d, rds_r_cnt_offset_d, rds_l_cnt_offset_d, 
+    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
     CUDA_CHECK(cudaDeviceSynchronize());
     kernel_time.timer_end();
     double left_kernel_time = kernel_time.get_total_time();
