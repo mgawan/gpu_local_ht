@@ -1,5 +1,23 @@
 #include "kernel.hpp"
 
+__device__ void revcomp_dev(cstr_type& seq, cstr_type& seq_rc){
+  //string seq_rc = "";
+  for (int i = seq.length - 1; i >= 0; i--) {
+    switch (seq.start_ptr[i]) {
+      case 'A': seq_rc.start_ptr[seq_rc.length] = 'T'; break;
+      case 'C': seq_rc.start_ptr[seq_rc.length] = 'G'; break;
+      case 'G': seq_rc.start_ptr[seq_rc.length] = 'C'; break;
+      case 'T': seq_rc.start_ptr[seq_rc.length] = 'A'; break;
+      case 'N': seq_rc.start_ptr[seq_rc.length] = 'N'; break;
+      case 'U': case 'R': case 'Y': case 'K': case 'M': case 'S': case 'W': case 'B': case 'D': case 'H': case 'V':
+        seq_rc.start_ptr[seq_rc.length]= 'N';
+        break;
+      default:
+        printf("*********Illegal Character in revcomp****************\n");
+    }
+    seq_rc.length++;
+  }
+}
 
 //TODO: all the hashtable entries need to be set to empty, figure that out
 __device__ void print_mer(cstr_type& mer){
@@ -200,7 +218,7 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
             walk_result = 'R'; // if the table already contains this mer then a cycle exits, return the walk with repeat.
             #ifdef DEBUG_PRINT_GPU
             if(idx == test)
-                printf("breaking at cycle found\n");
+                printf("breaking at cycle found, res: %c\n", walk_result);
             #endif
             break;
         }
@@ -210,7 +228,7 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
             walk_result = 'X';
             #ifdef DEBUG_PRINT_GPU
             if(idx == test)
-               printf("breaking at mer not found\n");
+               printf("breaking at mer not found,res: %c\n", walk_result);
             #endif
             break;
         }
@@ -218,14 +236,17 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
         if(ext == 'F' || ext == 'X'){ // if the table points that ext is fork or dead end the terminate the walk
             walk_result = ext;
             #ifdef DEBUG_PRINT_GPU
-                if(idx == test)
-                    printf("breaking at dead end\n");
+                if(idx == test){
+                    printf("breaking at dead end, res: %c\n", walk_result);
+                    printf("Mer Looked up:\n");
+                    print_mer(mer_walk_temp);
+                    printf("ext:%c\n",temp_mer.val.ext);
+                    printf("walk with mer_len:%d\n", mer_len);
+                    print_mer(walk);
+                }
             #endif
             break;
         }
-        mer_walk_temp.start_ptr = mer_walk_temp.start_ptr + 1; // increment the mer pointer and append the ext
-        mer_walk_temp.start_ptr[mer_walk_temp.length-1] = ext; // walk pointer points at the end of initial mer point.
-        walk.length++;
 
         #ifdef DEBUG_PRINT_GPU
         if(test == idx){
@@ -236,6 +257,10 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
             print_mer(walk);
         }
         #endif
+        mer_walk_temp.start_ptr = mer_walk_temp.start_ptr + 1; // increment the mer pointer and append the ext
+        mer_walk_temp.start_ptr[mer_walk_temp.length-1] = ext; // walk pointer points at the end of initial mer point.
+        walk.length++;
+
         
     }
     
@@ -357,7 +382,7 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_of
 __global__ void iterative_walks_kernel(int32_t* cid, int32_t* ctg_offsets, char* contigs, 
 char* reads_l, char* reads_r, char* quals_r, char* quals_l, int32_t* reads_l_offset, int32_t* reads_r_offset, int32_t* rds_count_l_sum, int32_t* rds_count_r_sum, 
 double* ctg_depth, loc_ht* global_ht, loc_ht_bool* global_ht_bool, int kmer_len, int32_t *term_counts, int64_t num_walks, int64_t max_walk_len, 
-int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_walks, char* mer_walk_temp){
+int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_walks, char* mer_walk_temp, int* final_walk_lens){
     const int idx = threadIdx.x + blockIdx.x * gridDim.x;
     cstr_type loc_ctg;
     char *loc_r_reads, *loc_l_reads, *loc_r_quals, *loc_l_quals;
@@ -434,7 +459,7 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_wa
           // to preserve memory on GPU
           //TODO: need to reinitialize the hashtable after each kmer size is done
 
-       // if(r_rds_cnt != 0){    //if read count is zero, no need to count mers
+        if(r_rds_cnt != 0){    //if read count is zero, no need to count mers
 
             for(uint32_t k = 0; k < max_ht_size; k++){ // resetting hash table for next go
                 loc_mer_map[k].key.length = EMPTY;
@@ -488,14 +513,16 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_wa
                 shift = LASSM_SHIFT_SIZE;
             }
 
-       // }
+        }else{
+            break;
+        }
     }
     if(longest_walk_thread.length > 0){
-        ctg_offsets[idx] = longest_walk_thread.length;
+        final_walk_lens[idx] = longest_walk_thread.length;
        // atomicAdd(num_walks, 1);
      //   atomicAdd(sum_ext, longest_walk_thread.length);
     }else{
-        ctg_offsets[idx] = 0;
+        final_walk_lens[idx] = 0;
     }
 
     #ifdef DEBUG_PRINT_GPU

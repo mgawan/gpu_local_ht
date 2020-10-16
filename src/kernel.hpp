@@ -83,6 +83,9 @@ struct ExtCounts {
   struct MerBase {
     char base;
     uint16_t nvotes_hi_q, nvotes, rating;
+    __device__ void print(){
+      printf("base:%c, nvotes_hiq_q:%d, nvotes:%d, rating:%d\n", base, nvotes_hi_q, nvotes, rating);
+    }
 
     __device__
     uint16_t get_base_rating(int depth) {
@@ -218,6 +221,9 @@ struct loc_ht_bool{
     }
 };
 
+
+__device__ void revcomp_dev(cstr_type& seq, cstr_type& seq_rc);
+
 __device__ void print_mer(cstr_type& mer);
 __global__ void ht_kernel(loc_ht* ht, char* contigs, int* offset_sum, int kmer_size);
 __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, cstr_type ctg_val, uint32_t max_size);
@@ -230,4 +236,4 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
 __global__ void iterative_walks_kernel(int32_t* cid, int32_t* ctg_offsets, char* contigs, 
 char* reads_l, char* reads_r, char* quals_r, char* quals_l, int32_t* reads_l_offset, int32_t* reads_r_offset, int32_t* rds_count_l_sum, int32_t* rds_count_r_sum, 
 double* ctg_depth, loc_ht* global_ht, loc_ht_bool* global_ht_bool, int kmer_len, int32_t *term_counts, int64_t num_walks, int64_t max_walk_len, 
-int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_walks, char* mer_walk_temp);
+int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_walks, char* mer_walk_temp, int* final_walk_lens);

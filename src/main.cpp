@@ -28,6 +28,7 @@ int main (int argc, char* argv[]){
     //host allocations for converting loc_assm_data to prim types
     int32_t *cid_h = new int32_t[vec_size];
     char *ctg_seqs_h = new char[max_ctg_size * vec_size];
+    char * ctgs_seqs_rc_h = new char[max_ctg_size * vec_size];// not requried on GPU, ctg space will be re-used
     int32_t *ctg_seq_offsets_h = new int32_t[vec_size];
     double *depth_h = new double[vec_size];
     char *reads_left_h = new char[total_l_reads * max_read_size];
@@ -41,7 +42,10 @@ int main (int argc, char* argv[]){
     int32_t *quals_l_offset_h = new int32_t[total_l_reads];
     int32_t *quals_r_offset_h = new int32_t[total_r_reads];
     int32_t *term_counts_h = new int32_t[3];
-    char* longest_walks_h = new char[vec_size * MAX_WALK_LEN];
+    char* longest_walks_r_h = new char[vec_size * MAX_WALK_LEN];
+    char* longest_walks_l_h = new char[vec_size * MAX_WALK_LEN]; // not needed on device, will re-use right walk memory
+    int* final_walk_lens_r_h = new int[vec_size];
+    int* final_walk_lens_l_h = new int[vec_size]; // not needed on device, will re use right walk memory
 
     int max_mer_len = 21;
 
@@ -53,9 +57,12 @@ int main (int argc, char* argv[]){
                            + sizeof(char) * total_l_reads * max_read_size + sizeof(int64_t)*3
                            + sizeof(loc_ht)*(max_read_size*max_read_count)*vec_size
                            + sizeof(char)*vec_size * MAX_WALK_LEN
-                           + (max_mer_len + MAX_WALK_LEN) * sizeof(char) * vec_size;
-    print_vals("Total GPU Mem. requested:", total_dev_mem);
+                           + (max_mer_len + MAX_WALK_LEN) * sizeof(char) * vec_size
+                           + sizeof(int) * vec_size;
+    print_vals("Total GPU Mem. (MB) requested:", (double)total_dev_mem/(1024*1024));
 
+    timer gpu_total;
+    gpu_total.timer_start();
     //device allocations for loc_assm_data
     int32_t *cid_d, *ctg_seq_offsets_d, *reads_l_offset_d, *reads_r_offset_d; 
     int32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d;
@@ -65,7 +72,10 @@ int main (int argc, char* argv[]){
     int32_t *term_counts_d;
     loc_ht *d_ht;
     loc_ht_bool *d_ht_bool;
+    int* final_walk_lens_d;
 
+    timer cuda_alloc_time;
+    cuda_alloc_time.timer_start();
     CUDA_CHECK(cudaMalloc(&cid_d, sizeof(int32_t) * vec_size));
     CUDA_CHECK(cudaMalloc(&ctg_seq_offsets_d, sizeof(int32_t) * vec_size));
     CUDA_CHECK(cudaMalloc(&reads_l_offset_d, sizeof(int32_t) * total_l_reads));
@@ -88,15 +98,15 @@ int main (int argc, char* argv[]){
     CUDA_CHECK(cudaMalloc(&longest_walks_d, sizeof(char)*vec_size * MAX_WALK_LEN));
     CUDA_CHECK(cudaMalloc(&mer_walk_temp_d, (max_mer_len + MAX_WALK_LEN) * sizeof(char) * vec_size));
     CUDA_CHECK(cudaMalloc(&d_ht_bool, sizeof(loc_ht_bool) * vec_size * MAX_WALK_LEN));
-
-
-    
-
+    CUDA_CHECK(cudaMalloc(&final_walk_lens_d, sizeof(int) * vec_size));
+    cuda_alloc_time.timer_end();
     //convert the loc_assem data to primitive structures for device
     int32_t ctgs_offset_sum = 0;
     int32_t reads_r_offset_sum = 0;
     int32_t reads_l_offset_sum = 0;
     int read_l_index = 0, read_r_index = 0;
+    timer data_packing;
+    data_packing.timer_start();
     for(int i = 0; i < data_in.size(); i++){
         CtgWithReads temp_data = data_in[i];
         cid_h[i] = temp_data.cid;
@@ -137,8 +147,12 @@ int main (int argc, char* argv[]){
     for(int i = 0; i < 3; i++){
         term_counts_h[i] = 0;
     }
+    data_packing.timer_end();
+    timer gpu_transfer;
 
+     print_vals("Host to Device Transfer...");
     //move the data to device
+    gpu_transfer.timer_start();
     CUDA_CHECK(cudaMemcpy(cid_d, cid_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(ctg_seq_offsets_d, ctg_seq_offsets_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(reads_l_offset_d, reads_l_offset_h, sizeof(int32_t) * total_l_reads, cudaMemcpyHostToDevice));
@@ -153,92 +167,176 @@ int main (int argc, char* argv[]){
     CUDA_CHECK(cudaMemcpy(quals_left_d, quals_left_h, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(term_counts_d, term_counts_h, sizeof(int32_t)*3, cudaMemcpyHostToDevice));
 
+    gpu_transfer.timer_end();
+    double transfer_time = gpu_transfer.get_total_time();
+
     //call kernel here, one thread per contig
     unsigned total_threads = vec_size;
     
 
     print_vals("Calling Kernel with threads:", vec_size);
     int64_t sum_ext, num_walks;
+    timer kernel_time;
 
+    kernel_time.timer_start();
     iterative_walks_kernel<<<1,vec_size>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
-    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d);
+    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    kernel_time.timer_end();
+    double right_kernel_time = kernel_time.get_total_time();
 
-
-    print_vals("Device to Host Transfer...");
-    
-    CUDA_CHECK(cudaMemcpy(longest_walks_h, longest_walks_d, sizeof(char) * vec_size * MAX_WALK_LEN, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(ctg_seq_offsets_h, ctg_seq_offsets_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); // ctg offset memory wil be reused for copying back longest lengths
+    print_vals("Device to Host Transfer...", "Copying back right walks");
+    gpu_transfer.timer_start();
+    CUDA_CHECK(cudaMemcpy(longest_walks_r_h, longest_walks_d, sizeof(char) * vec_size * MAX_WALK_LEN, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(final_walk_lens_r_h, final_walk_lens_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); 
+    gpu_transfer.timer_end();
+    transfer_time += gpu_transfer.get_total_time();
 
     #ifdef DEBUG_PRINT_CPU
-        print_vals("longest walk for contig 0 has length:", ctg_seq_offsets_h[0]);
-        for(int i = 0; i < ctg_seq_offsets_h[0]; i++){
-            std::cout<<longest_walks_h[i];
+        print_vals("printing walks for right extension:");
+        print_vals("longest walk for contig 0 has length:", final_walk_lens_r_h[0]);
+        for(int i = 0; i < final_walk_lens_r_h[0]; i++){
+            std::cout<<longest_walks_r_h[i];
         }
         std::cout<<std::endl;
-        print_vals("longest walk for contig 1 has length:", ctg_seq_offsets_h[1]);
-        for(int i = 0; i < ctg_seq_offsets_h[1]; i++){
-            std::cout<<longest_walks_h[MAX_WALK_LEN*1 + i];
+        print_vals("longest walk for contig 1 has length:", final_walk_lens_r_h[1]);
+        for(int i = 0; i < final_walk_lens_r_h[1]; i++){
+            std::cout<<longest_walks_r_h[MAX_WALK_LEN*1 + i];
         }
         std::cout<<std::endl;
 
-        print_vals("longest walk for contig 2 has length:", ctg_seq_offsets_h[2]);
-        for(int i = 0; i < ctg_seq_offsets_h[2]; i++){
-            std::cout<<longest_walks_h[MAX_WALK_LEN*2 + i];
+        print_vals("longest walk for contig 2 has length:", final_walk_lens_r_h[2]);
+        for(int i = 0; i < final_walk_lens_r_h[2]; i++){
+            std::cout<<longest_walks_r_h[MAX_WALK_LEN*2 + i];
         }
         std::cout<<std::endl;
-        print_vals("longest walk for contig 3 has length:", ctg_seq_offsets_h[3]);
-        for(int i = 0; i < ctg_seq_offsets_h[3]; i++){
-            std::cout<<longest_walks_h[MAX_WALK_LEN*3 + i];
+        print_vals("longest walk for contig 3 has length:", final_walk_lens_r_h[3]);
+        for(int i = 0; i < final_walk_lens_r_h[3]; i++){
+            std::cout<<longest_walks_r_h[MAX_WALK_LEN*3 + i];
+        }
+        std::cout<<std::endl;
+                std::cout<<std::endl;
+                print_vals("longest walk for contig 4 has length:", final_walk_lens_r_h[4]);
+        for(int i = 0; i < final_walk_lens_r_h[4]; i++){
+            std::cout<<longest_walks_r_h[MAX_WALK_LEN*4 + i];
+        }
+        std::cout<<std::endl;
+
+        print_vals("longest walk for contig 5 has length:", final_walk_lens_r_h[5]);
+        for(int i = 0; i < final_walk_lens_r_h[5]; i++){
+            std::cout<<longest_walks_r_h[MAX_WALK_LEN*5 + i];
+        }
+        std::cout<<std::endl;
+        print_vals("longest walk for contig 6 has length:", final_walk_lens_r_h[6]);
+        for(int i = 0; i < final_walk_lens_r_h[6]; i++){
+            std::cout<<longest_walks_r_h[MAX_WALK_LEN*6 + i];
         }
         std::cout<<std::endl;
     #endif
+    // perform revcomp of contig sequences and launch kernel with left reads, TODO: move right and left reads data separately
+    print_vals("revcomp-ing the contigs for next kernel");
+    timer rev_comp_;
+    rev_comp_.timer_start();
+    for(int j = 0; j < vec_size; j++){
+        int size_lst;
+        char* curr_seq;
+        char* curr_seq_rc;
+        if(j == 0){
+            size_lst = ctg_seq_offsets_h[j];
+            curr_seq = ctg_seqs_h;
+            curr_seq_rc = ctgs_seqs_rc_h;
+        }
+        else{
+            size_lst = ctg_seq_offsets_h[j] - ctg_seq_offsets_h[j-1];
+            curr_seq = ctg_seqs_h + ctg_seq_offsets_h[j - 1];
+            curr_seq_rc = ctgs_seqs_rc_h + ctg_seq_offsets_h[j - 1];
+        }
+        revcomp(curr_seq, curr_seq_rc, size_lst);
+        #ifdef DEBUG_PRINT_CPU   
+        print_vals("orig seq:");
+        for(int h = 0; h < size_lst; h++)
+            std::cout<<curr_seq[h];
+        std::cout << std::endl;
+        print_vals("recvomp seq:");
+        for(int h = 0; h < size_lst; h++)
+            std::cout<<curr_seq_rc[h];
+        std::cout << std::endl;    
+        #endif   
 
+    }
+
+    rev_comp_.timer_end();
+
+    //cpying rev comped ctgs to device on same memory as previous ctgs
+    gpu_transfer.timer_start();
+    CUDA_CHECK(cudaMemcpy(ctg_seqs_d, ctgs_seqs_rc_h, sizeof(char) * max_ctg_size * vec_size, cudaMemcpyHostToDevice));
+    gpu_transfer.timer_end();
+    transfer_time += gpu_transfer.get_total_time();
+    // launching kernel by swapping right and left reads, TODO: make this correct
+    kernel_time.timer_start();
+    iterative_walks_kernel<<<1,vec_size>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_right_d, reads_left_d, quals_left_d, quals_right_d, reads_r_offset_d, reads_l_offset_d, rds_r_cnt_offset_d, rds_l_cnt_offset_d, 
+    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    kernel_time.timer_end();
+    double left_kernel_time = kernel_time.get_total_time();
+    print_vals("Device to Host Transfer...", "Copying back left walks");
+    
+    gpu_transfer.timer_start();
+    CUDA_CHECK(cudaMemcpy(longest_walks_l_h, longest_walks_d, sizeof(char) * vec_size * MAX_WALK_LEN, cudaMemcpyDeviceToHost)); // copy back left walks
+    CUDA_CHECK(cudaMemcpy(final_walk_lens_l_h, final_walk_lens_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); 
+    gpu_transfer.timer_end();
+    transfer_time += gpu_transfer.get_total_time();
+    #ifdef DEBUG_PRINT_CPU
+        print_vals("printing walks for left extension:");
+        print_vals("longest walk for contig 0 has length:", final_walk_lens_l_h[0]);
+        for(int i = 0; i < final_walk_lens_l_h[0]; i++){
+            std::cout<<longest_walks_l_h[i];
+        }
+        std::cout<<std::endl;
+        print_vals("longest walk for contig 1 has length:", final_walk_lens_l_h[1]);
+        for(int i = 0; i < final_walk_lens_l_h[1]; i++){
+            std::cout<<longest_walks_l_h[MAX_WALK_LEN*1 + i];
+        }
+        std::cout<<std::endl;
+
+        print_vals("longest walk for contig 2 has length:", final_walk_lens_l_h[2]);
+        for(int i = 0; i < final_walk_lens_l_h[2]; i++){
+            std::cout<<longest_walks_l_h[MAX_WALK_LEN*2 + i];
+        }
+        std::cout<<std::endl;
+        print_vals("longest walk for contig 3 has length:", final_walk_lens_l_h[3]);
+        for(int i = 0; i < final_walk_lens_l_h[3]; i++){
+            std::cout<<longest_walks_l_h[MAX_WALK_LEN*3 + i];
+        }
+        std::cout<<std::endl;
+                print_vals("longest walk for contig 4 has length:", final_walk_lens_l_h[4]);
+        for(int i = 0; i < final_walk_lens_l_h[4]; i++){
+            std::cout<<longest_walks_l_h[MAX_WALK_LEN*4 + i];
+        }
+        std::cout<<std::endl;
+
+        print_vals("longest walk for contig 5 has length:", final_walk_lens_l_h[5]);
+        for(int i = 0; i < final_walk_lens_l_h[5]; i++){
+            std::cout<<longest_walks_l_h[MAX_WALK_LEN*5 + i];
+        }
+        std::cout<<std::endl;
+        print_vals("longest walk for contig 6 has length:", final_walk_lens_l_h[6]);
+        for(int i = 0; i < final_walk_lens_l_h[6]; i++){
+            std::cout<<longest_walks_l_h[MAX_WALK_LEN*6 + i];
+        }
+        std::cout<<std::endl;
+    #endif
+    
     CUDA_CHECK(cudaFree(term_counts_d));
-    //if(DEBUG_PRINT_CPU)
-    #ifdef DEBUG_PRINT_CPU
-        print_vals("Exiting...");
-    #endif
-    //free up the memory
 
-    
-    
-
-
-
+    gpu_total.timer_end();
+    print_vals("Total Time:", gpu_total.get_total_time() );
+    print_vals("Total Data Transfer Time:", transfer_time);
+    print_vals("Total Right Kernel Time:", right_kernel_time);
+    print_vals("Total Left Kernel Time:", left_kernel_time);
+    print_vals("Total rec comp Time:", rev_comp_.get_total_time());
+    print_vals("Total Data packing time:", data_packing.get_total_time());
+    print_vals("Total Cuda malloc time:", cuda_alloc_time.get_total_time());
+  //TODO: free up memory
     return 0;
 }
-
-
-    // //allocate memory for host and device char arrays
-    // h_contigs = new char[max_ctg_size*contigs.size()];
-    // CUDA_CHECK(cudaMalloc(&d_contigs, sizeof(char)*max_ctg_size*contigs.size()));
-    // //memory for offset array
-    // h_offset_arr  = new int[contigs.size()];
-    // CUDA_CHECK(cudaMalloc(&d_offset_arr, sizeof(int)*contigs.size()));
-    // //memory allocation on device for local hashtables
-    // CUDA_CHECK(cudaMalloc(&d_ht, sizeof(loc_ht)*HT_SIZE*TOT_THREADS));
-
-
-    // //convert strings to char* and prepare offset array
-    // for(int i = 0; i < contigs.size(); i++)
-    // {
-    //     char* seq_ptr = h_contigs + offset_sum;
-    //     memcpy(seq_ptr, contigs[i].c_str(), contigs[i].size());
-    //     offset_sum += contigs[i].size();
-    //     h_offset_arr[i] = offset_sum;
-    // }
-    // //moving data to device
-    // CUDA_CHECK(cudaMemcpy(d_contigs, h_contigs, sizeof(char)*max_ctg_size*contigs.size(), cudaMemcpyHostToDevice));
-    // CUDA_CHECK(cudaMemcpy(d_offset_arr, h_offset_arr, sizeof(int)*contigs.size(), cudaMemcpyHostToDevice));
-    // //print_vals("launch kernel", "another print");
-    // ht_kernel<<<1,1>>>(d_ht, d_contigs, d_offset_arr, KMER_SZ);
-
-    // CUDA_CHECK(cudaFree(d_ht));
-
-    // std::unordered_map<std::string, int> my_map;
-
-    // my_map.insert({"this_map",10});
-    // my_map.insert({"map",100});
-    // my_map.insert({"this_map", 15});
-    // print_vals("total_insertions:", "count");
-   // print_vals(my_map["this_map"], my_map["map"]);
