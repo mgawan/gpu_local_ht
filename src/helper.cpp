@@ -61,6 +61,7 @@ int32_t& max_ctg_size, int32_t& total_r_reads, int32_t& total_l_reads, int32_t& 
       //ctgs_map->insert({ctg_with_reads.cid, ctg_with_reads});
       data_in->push_back(temp_in);
     }
+    print_vals("inside max:", max_r_count);
   }
 
   void print_loc_data(std::vector<CtgWithReads> *data_in){

@@ -10,16 +10,50 @@
 #define TOT_THREADS 1
 #define KMER_SZ 4
 
+double total_data_time = 0;
+double total_kernel_time = 0;
 
-
+std::ofstream ofile("/global/cscratch1/sd/mgawan/loc_assem_test-2/merged/contig-test-1.dat");
+void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
 int main (int argc, char* argv[]){
+
     std::string in_file = argv[1];
-    std::string out_file = argv[2];
     std::vector<CtgWithReads> data_in;
     int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size,max_r_count, max_l_count);
+    print_vals("total exts:",data_in.size());
+        timer final_time;
+    final_time.timer_start();
+    int slice_size = 2000;
+    int iterations = (data_in.size() + slice_size)/slice_size;
+    // print_vals("Total Contigs:", data_in.size());
+    // print_vals("Slices:", iterations);
+    
+    for(int i = 0; i < iterations; i++){
+        int left_over;
+        if(iterations - 1 == i)
+            left_over = data_in.size() % slice_size;
+        else
+            left_over = slice_size;
+        std::vector<CtgWithReads> slice_data (&data_in[i*slice_size], &data_in[i*slice_size + left_over]);
+
+        print_vals("*** NEW SLICE LAUNCHING ***","Current slice size:", slice_data.size(), "Slice ID:",i);
+        print_vals("max:",max_r_count);
+        call_kernel(slice_data, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count);
+    }
+    
+
+  //TODO: free up memory
+  final_time.timer_end();
+  print_vals("Total Overall Time:", final_time.get_total_time());
+  print_vals("Total Data Transfer Time:", total_data_time);
+  print_vals("Total Kernel Time:", total_kernel_time);
+    return 0;
+}
+
+void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count){
     int32_t vec_size = data_in.size();
     int32_t max_read_count = max_r_count>max_l_count ? max_r_count : max_l_count;
 
@@ -57,12 +91,11 @@ int main (int argc, char* argv[]){
                            + sizeof(char)*vec_size * MAX_WALK_LEN
                            + (max_mer_len + MAX_WALK_LEN) * sizeof(char) * vec_size
                            + sizeof(int) * vec_size;
-    print_vals("Total GPU Mem. (MB) requested:", (double)total_dev_mem/(1024*1024));
-    print_vals("Total Contigs:", vec_size);
+    print_vals("Total GPU Mem. (GB) requested:", (double)total_dev_mem/(1024*1024*1024));
     print_vals("max_l_count:",max_l_count,"max_r_count:", max_r_count);
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, 0);
-    print_vals("GPU Mem Avail (MB):", (double)prop.totalGlobalMem/(1024*1024));
+    print_vals("GPU Mem Avail (GB):", (double)prop.totalGlobalMem/(1024*1024*1024));
 
     timer gpu_total;
     gpu_total.timer_start();
@@ -173,6 +206,7 @@ int main (int argc, char* argv[]){
 
     gpu_transfer.timer_end();
     double transfer_time = gpu_transfer.get_total_time();
+    
 
     //call kernel here, one thread per contig
     unsigned total_threads = vec_size;
@@ -334,8 +368,25 @@ int main (int argc, char* argv[]){
     #endif
     
     CUDA_CHECK(cudaFree(term_counts_d));
+    CUDA_CHECK(cudaFree(cid_d));
+    CUDA_CHECK(cudaFree(ctg_seq_offsets_d));
+    CUDA_CHECK(cudaFree(reads_l_offset_d));
+    CUDA_CHECK(cudaFree(reads_r_offset_d));
+    CUDA_CHECK(cudaFree(rds_l_cnt_offset_d));
+    CUDA_CHECK(cudaFree(rds_r_cnt_offset_d));
+    CUDA_CHECK(cudaFree(ctg_seqs_d));
+    CUDA_CHECK(cudaFree(reads_left_d));
+    CUDA_CHECK(cudaFree(reads_right_d));
+    CUDA_CHECK(cudaFree(depth_d));
+    CUDA_CHECK(cudaFree(quals_right_d));
+    CUDA_CHECK(cudaFree(quals_left_d));
+    CUDA_CHECK(cudaFree(d_ht)); 
+    CUDA_CHECK(cudaFree(longest_walks_d));
+    CUDA_CHECK(cudaFree(mer_walk_temp_d));
+    CUDA_CHECK(cudaFree(d_ht_bool));
+    CUDA_CHECK(cudaFree(final_walk_lens_d));
     //adding pre and post walks in strings and printing the results out in a file.
-    std::ofstream ofile(out_file);
+    
     for(int i = 0; i< vec_size; i++){
         if(final_walk_lens_l_h[i] != 0){
             std::string left(&longest_walks_l_h[MAX_WALK_LEN*i],final_walk_lens_l_h[i]);
@@ -346,17 +397,19 @@ int main (int argc, char* argv[]){
             std::string right(&longest_walks_r_h[MAX_WALK_LEN*i],final_walk_lens_r_h[i]);
             data_in[i].seq += right;
         }
-        ofile << data_in[i].cid<<"\t"<<data_in[i].seq<<std::endl;
+        ofile << data_in[i].cid<<" "<<data_in[i].seq<<std::endl;
     }
 
     gpu_total.timer_end();
     print_vals("Total Time:", gpu_total.get_total_time() );
-    print_vals("Total Data Transfer Time:", transfer_time);
-    print_vals("Total Right Kernel Time:", right_kernel_time);
-    print_vals("Total Left Kernel Time:", left_kernel_time);
-    print_vals("Total rec comp Time:", rev_comp_.get_total_time());
-    print_vals("Total Data packing time:", data_packing.get_total_time());
+    //print_vals("Total Data Transfer Time:", transfer_time);
+    total_data_time += transfer_time;
+   // print_vals("Total Right Kernel Time:", right_kernel_time);
+    total_kernel_time += right_kernel_time;
+   // print_vals("Total Left Kernel Time:", left_kernel_time);
+    total_kernel_time += left_kernel_time;
+   // print_vals("Total rec comp Time:", rev_comp_.get_total_time());
+   // print_vals("Total Data packing time:", data_packing.get_total_time());
     print_vals("Total Cuda malloc time:", cuda_alloc_time.get_total_time());
-  //TODO: free up memory
-    return 0;
+
 }

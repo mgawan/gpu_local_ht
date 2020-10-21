@@ -418,7 +418,7 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_wa
         else
             loc_l_quals = quals_l + reads_l_offset[rds_count_l_sum[idx - 1] - 1]; // you want to start from where previous contigs, last read ends. 
     }
-    max_mer_len = min(max_mer_len, loc_ctg.length);
+    max_mer_len = min(25, loc_ctg.length);
     char* loc_mer_walk_temp = mer_walk_temp + idx * (MAX_WALK_LEN + max_mer_len);
 
    // uint32_t mer_len = 21;

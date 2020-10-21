@@ -16,8 +16,8 @@
 #define LASSM_MIN_VIABLE_DEPTH 0.2
 #define LASSM_MIN_EXPECTED_DEPTH 0.3
 #define LASSM_RATING_THRES 0
-#define MAX_WALK_LEN 370
-#define LASSM_MIN_KMER_LEN 13
+#define MAX_WALK_LEN 121+(2*251)
+#define LASSM_MIN_KMER_LEN 21
 #define LASSM_SHIFT_SIZE 8
 
 struct cstr_type{
