@@ -13,8 +13,8 @@
 double total_data_time = 0;
 double total_kernel_time = 0;
 
-std::ofstream ofile("/global/cscratch1/sd/mgawan/loc_assem_test-2/merged/contig-test-1.dat");
-void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count);
+std::ofstream ofile("contig-test-1.dat");
+void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count, int insert_avg, int insert_stddev);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
 int main (int argc, char* argv[]){
@@ -26,7 +26,7 @@ int main (int argc, char* argv[]){
     print_vals("total exts:",data_in.size());
         timer final_time;
     final_time.timer_start();
-    int slice_size = 2000;
+    int slice_size = 10000;
     int iterations = (data_in.size() + slice_size)/slice_size;
     // print_vals("Total Contigs:", data_in.size());
     // print_vals("Slices:", iterations);
@@ -41,7 +41,7 @@ int main (int argc, char* argv[]){
 
         print_vals("*** NEW SLICE LAUNCHING ***","Current slice size:", slice_data.size(), "Slice ID:",i);
         print_vals("max:",max_r_count);
-        call_kernel(slice_data, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count);
+        call_kernel(slice_data, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count, 121, 251);
     }
     
 
@@ -53,9 +53,10 @@ int main (int argc, char* argv[]){
     return 0;
 }
 
-void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count){
+void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count, int insert_avg, int insert_stddev){
     int32_t vec_size = data_in.size();
     int32_t max_read_count = max_r_count>max_l_count ? max_r_count : max_l_count;
+    int max_walk_len = insert_avg + 2 * insert_stddev;
 
     //host allocations for converting loc_assm_data to prim types
     int32_t *cid_h = new int32_t[vec_size];
@@ -74,8 +75,8 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     int32_t *quals_l_offset_h = new int32_t[total_l_reads];
     int32_t *quals_r_offset_h = new int32_t[total_r_reads];
     int32_t *term_counts_h = new int32_t[3];
-    char* longest_walks_r_h = new char[vec_size * MAX_WALK_LEN];
-    char* longest_walks_l_h = new char[vec_size * MAX_WALK_LEN]; // not needed on device, will re-use right walk memory
+    char* longest_walks_r_h = new char[vec_size * max_walk_len];
+    char* longest_walks_l_h = new char[vec_size * max_walk_len]; // not needed on device, will re-use right walk memory
     int* final_walk_lens_r_h = new int[vec_size];
     int* final_walk_lens_l_h = new int[vec_size]; // not needed on device, will re use right walk memory
 
@@ -88,8 +89,8 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
                            + sizeof(double) * vec_size + sizeof(char) * total_r_reads * max_read_size 
                            + sizeof(char) * total_l_reads * max_read_size + sizeof(int64_t)*3
                            + sizeof(loc_ht)*(max_read_size*max_read_count)*vec_size
-                           + sizeof(char)*vec_size * MAX_WALK_LEN
-                           + (max_mer_len + MAX_WALK_LEN) * sizeof(char) * vec_size
+                           + sizeof(char)*vec_size * max_walk_len
+                           + (max_mer_len + max_walk_len) * sizeof(char) * vec_size
                            + sizeof(int) * vec_size;
     print_vals("Total GPU Mem. (GB) requested:", (double)total_dev_mem/(1024*1024*1024));
     print_vals("max_l_count:",max_l_count,"max_r_count:", max_r_count);
@@ -131,9 +132,9 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     // TODO: to account for overfilling of the hashtable, consider assuming load factor of 0.8 and add a cushion of memory in hashtable
     CUDA_CHECK(cudaMalloc(&d_ht, sizeof(loc_ht)*(max_read_size*max_read_count)*vec_size)); 
     //TODO: come back to this and see if we can find a better approximation of longest walk size
-    CUDA_CHECK(cudaMalloc(&longest_walks_d, sizeof(char)*vec_size * MAX_WALK_LEN));
-    CUDA_CHECK(cudaMalloc(&mer_walk_temp_d, (max_mer_len + MAX_WALK_LEN) * sizeof(char) * vec_size));
-    CUDA_CHECK(cudaMalloc(&d_ht_bool, sizeof(loc_ht_bool) * vec_size * MAX_WALK_LEN));
+    CUDA_CHECK(cudaMalloc(&longest_walks_d, sizeof(char)*vec_size * max_walk_len));
+    CUDA_CHECK(cudaMalloc(&mer_walk_temp_d, (max_mer_len + max_walk_len) * sizeof(char) * vec_size));
+    CUDA_CHECK(cudaMalloc(&d_ht_bool, sizeof(loc_ht_bool) * vec_size * max_walk_len));
     CUDA_CHECK(cudaMalloc(&final_walk_lens_d, sizeof(int) * vec_size));
     cuda_alloc_time.timer_end();
     //convert the loc_assem data to primitive structures for device
@@ -220,14 +221,14 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
 
     kernel_time.timer_start();
     iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
-    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
+    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
     CUDA_CHECK(cudaDeviceSynchronize());
     kernel_time.timer_end();
     double right_kernel_time = kernel_time.get_total_time();
 
     print_vals("Device to Host Transfer...", "Copying back right walks");
     gpu_transfer.timer_start();
-    CUDA_CHECK(cudaMemcpy(longest_walks_r_h, longest_walks_d, sizeof(char) * vec_size * MAX_WALK_LEN, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(longest_walks_r_h, longest_walks_d, sizeof(char) * vec_size * max_walk_len, cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaMemcpy(final_walk_lens_r_h, final_walk_lens_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); 
     gpu_transfer.timer_end();
     transfer_time += gpu_transfer.get_total_time();
@@ -241,35 +242,35 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
         std::cout<<std::endl;
         print_vals("longest walk for contig 1 has length:", final_walk_lens_r_h[1]);
         for(int i = 0; i < final_walk_lens_r_h[1]; i++){
-            std::cout<<longest_walks_r_h[MAX_WALK_LEN*1 + i];
+            std::cout<<longest_walks_r_h[max_walk_len*1 + i];
         }
         std::cout<<std::endl;
 
         print_vals("longest walk for contig 2 has length:", final_walk_lens_r_h[2]);
         for(int i = 0; i < final_walk_lens_r_h[2]; i++){
-            std::cout<<longest_walks_r_h[MAX_WALK_LEN*2 + i];
+            std::cout<<longest_walks_r_h[max_walk_len*2 + i];
         }
         std::cout<<std::endl;
         print_vals("longest walk for contig 3 has length:", final_walk_lens_r_h[3]);
         for(int i = 0; i < final_walk_lens_r_h[3]; i++){
-            std::cout<<longest_walks_r_h[MAX_WALK_LEN*3 + i];
+            std::cout<<longest_walks_r_h[max_walk_len*3 + i];
         }
         std::cout<<std::endl;
                 std::cout<<std::endl;
                 print_vals("longest walk for contig 4 has length:", final_walk_lens_r_h[4]);
         for(int i = 0; i < final_walk_lens_r_h[4]; i++){
-            std::cout<<longest_walks_r_h[MAX_WALK_LEN*4 + i];
+            std::cout<<longest_walks_r_h[max_walk_len*4 + i];
         }
         std::cout<<std::endl;
 
         print_vals("longest walk for contig 5 has length:", final_walk_lens_r_h[5]);
         for(int i = 0; i < final_walk_lens_r_h[5]; i++){
-            std::cout<<longest_walks_r_h[MAX_WALK_LEN*5 + i];
+            std::cout<<longest_walks_r_h[max_walk_len*5 + i];
         }
         std::cout<<std::endl;
         print_vals("longest walk for contig 6 has length:", final_walk_lens_r_h[6]);
         for(int i = 0; i < final_walk_lens_r_h[6]; i++){
-            std::cout<<longest_walks_r_h[MAX_WALK_LEN*6 + i];
+            std::cout<<longest_walks_r_h[max_walk_len*6 + i];
         }
         std::cout<<std::endl;
     #endif
@@ -315,14 +316,14 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     // launching kernel by swapping right and left reads, TODO: make this correct
     kernel_time.timer_start();
     iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_right_d, reads_left_d, quals_left_d, quals_right_d, reads_r_offset_d, reads_l_offset_d, rds_r_cnt_offset_d, rds_l_cnt_offset_d, 
-    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, MAX_WALK_LEN, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
+    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
     CUDA_CHECK(cudaDeviceSynchronize());
     kernel_time.timer_end();
     double left_kernel_time = kernel_time.get_total_time();
     print_vals("Device to Host Transfer...", "Copying back left walks");
     
     gpu_transfer.timer_start();
-    CUDA_CHECK(cudaMemcpy(longest_walks_l_h, longest_walks_d, sizeof(char) * vec_size * MAX_WALK_LEN, cudaMemcpyDeviceToHost)); // copy back left walks
+    CUDA_CHECK(cudaMemcpy(longest_walks_l_h, longest_walks_d, sizeof(char) * vec_size * max_walk_len, cudaMemcpyDeviceToHost)); // copy back left walks
     CUDA_CHECK(cudaMemcpy(final_walk_lens_l_h, final_walk_lens_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); 
     gpu_transfer.timer_end();
     transfer_time += gpu_transfer.get_total_time();
@@ -335,34 +336,34 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
         std::cout<<std::endl;
         print_vals("longest walk for contig 1 has length:", final_walk_lens_l_h[1]);
         for(int i = 0; i < final_walk_lens_l_h[1]; i++){
-            std::cout<<longest_walks_l_h[MAX_WALK_LEN*1 + i];
+            std::cout<<longest_walks_l_h[max_walk_len*1 + i];
         }
         std::cout<<std::endl;
 
         print_vals("longest walk for contig 2 has length:", final_walk_lens_l_h[2]);
         for(int i = 0; i < final_walk_lens_l_h[2]; i++){
-            std::cout<<longest_walks_l_h[MAX_WALK_LEN*2 + i];
+            std::cout<<longest_walks_l_h[max_walk_len*2 + i];
         }
         std::cout<<std::endl;
         print_vals("longest walk for contig 3 has length:", final_walk_lens_l_h[3]);
         for(int i = 0; i < final_walk_lens_l_h[3]; i++){
-            std::cout<<longest_walks_l_h[MAX_WALK_LEN*3 + i];
+            std::cout<<longest_walks_l_h[max_walk_len*3 + i];
         }
         std::cout<<std::endl;
                 print_vals("longest walk for contig 4 has length:", final_walk_lens_l_h[4]);
         for(int i = 0; i < final_walk_lens_l_h[4]; i++){
-            std::cout<<longest_walks_l_h[MAX_WALK_LEN*4 + i];
+            std::cout<<longest_walks_l_h[max_walk_len*4 + i];
         }
         std::cout<<std::endl;
 
         print_vals("longest walk for contig 5 has length:", final_walk_lens_l_h[5]);
         for(int i = 0; i < final_walk_lens_l_h[5]; i++){
-            std::cout<<longest_walks_l_h[MAX_WALK_LEN*5 + i];
+            std::cout<<longest_walks_l_h[max_walk_len*5 + i];
         }
         std::cout<<std::endl;
         print_vals("longest walk for contig 6 has length:", final_walk_lens_l_h[6]);
         for(int i = 0; i < final_walk_lens_l_h[6]; i++){
-            std::cout<<longest_walks_l_h[MAX_WALK_LEN*6 + i];
+            std::cout<<longest_walks_l_h[max_walk_len*6 + i];
         }
         std::cout<<std::endl;
     #endif
@@ -389,12 +390,12 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     
     for(int i = 0; i< vec_size; i++){
         if(final_walk_lens_l_h[i] != 0){
-            std::string left(&longest_walks_l_h[MAX_WALK_LEN*i],final_walk_lens_l_h[i]);
+            std::string left(&longest_walks_l_h[max_walk_len*i],final_walk_lens_l_h[i]);
             std::string left_rc = revcomp(left);
             data_in[i].seq.insert(0,left_rc);  
         }
         if(final_walk_lens_r_h[i] != 0){
-            std::string right(&longest_walks_r_h[MAX_WALK_LEN*i],final_walk_lens_r_h[i]);
+            std::string right(&longest_walks_r_h[max_walk_len*i],final_walk_lens_r_h[i]);
             data_in[i].seq += right;
         }
         ofile << data_in[i].cid<<" "<<data_in[i].seq<<std::endl;

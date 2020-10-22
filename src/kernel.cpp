@@ -185,7 +185,7 @@ loc_ht_bool& ht_get(loc_ht_bool* thread_ht, cstr_type kmer_key, uint32_t max_siz
 //TODO: check if we need longest walk in this function
 __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32_t max_ht_size, int& mer_len, cstr_type& mer_walk_temp, cstr_type& longest_walk, cstr_type& walk, const int idx, int max_walk_len){
     char walk_result = 'X';
-    int test = 2;
+    int test = 0;
     int walk_length = 0;
     //cstr_type mer(mer_walk_temp, mer_len);
     //cstr_type walk(mer_walk_temp + mer_len, walk_length); // walk pointer starts at the end of initial mer pointer
@@ -265,7 +265,7 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_of
     cstr_type read;
     cstr_type qual;
     uint32_t running_sum_len = 0;
-    int test = 2;
+    int test = 0;
     #ifdef DEBUG_PRINT_GPU
     if(DEBUG_PRINT_GPU && idx == test)
         printf("inside_count_mers\n");
@@ -371,17 +371,17 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_wa
     char *loc_r_reads, *loc_l_reads, *loc_r_quals, *loc_l_quals;
     int32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
     loc_ht* loc_mer_map = global_ht + idx * max_read_size * max_read_count;
-    loc_ht_bool* loc_bool_map = global_ht_bool + idx * MAX_WALK_LEN;
+    loc_ht_bool* loc_bool_map = global_ht_bool + idx * max_walk_len;
     double loc_ctg_depth = ctg_depth[idx];
     int64_t excess_reads;
     uint32_t qual_offset = 0, max_ht_size = max_read_size * max_read_count;
-    char* longest_walk_loc = longest_walks + idx * MAX_WALK_LEN;
-        int test = 2;
+    char* longest_walk_loc = longest_walks + idx * max_walk_len;
+    int test = 0;
 
 
 
       int min_mer_len = LASSM_MIN_KMER_LEN;
-      int max_mer_len=kmer_len;
+      int max_mer_len = LASSM_MAX_KMER_LEN;
       
 
     if(idx == 0){
@@ -418,8 +418,8 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_wa
         else
             loc_l_quals = quals_l + reads_l_offset[rds_count_l_sum[idx - 1] - 1]; // you want to start from where previous contigs, last read ends. 
     }
-    max_mer_len = min(25, loc_ctg.length);
-    char* loc_mer_walk_temp = mer_walk_temp + idx * (MAX_WALK_LEN + max_mer_len);
+    max_mer_len = min(max_mer_len, loc_ctg.length);
+    char* loc_mer_walk_temp = mer_walk_temp + idx * (max_walk_len + max_mer_len);
 
    // uint32_t mer_len = 21;
     // cstr_type ctg_mer(loc_ctg.start_ptr + (loc_ctg.length - mer_len), mer_len);
@@ -435,7 +435,7 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_wa
     int shift = 0;
     for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
             #ifdef DEBUG_PRINT_GPU
-               printf("GPU: shift:%d, mer_len:%d, min_mer_len:%d, idx:%d\n", shift, mer_len, min_mer_len, idx);
+               printf("GPU: shift:%d, mer_len:%d, min_mer_len:%d, idx:%d, max_mer_len:%d\n", shift, mer_len, min_mer_len, idx, max_mer_len);
             #endif
         
           //TODO: add a check if total number of reads exceeds a certain number/too large, skip that one, may be do this on cpu 
@@ -462,11 +462,11 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_wa
             }
             #endif
 
-            for(uint32_t k = 0; k < MAX_WALK_LEN; k++){
+            for(uint32_t k = 0; k < max_walk_len; k++){ // resetting bool map for next go
                 loc_bool_map[k].key.length = EMPTY;
             }
             //TODO: initalize hash table find a faster way of doing this
-            char walk_res = walk_mers(loc_mer_map, loc_bool_map, max_ht_size, mer_len, loc_mer_walk, longest_walk_thread, walk, idx, MAX_WALK_LEN);
+            char walk_res = walk_mers(loc_mer_map, loc_bool_map, max_ht_size, mer_len, loc_mer_walk, longest_walk_thread, walk, idx, max_walk_len);
             #ifdef DEBUG_PRINT_GPU
             if(idx == test){
                 printf("walk_res:%c, idx:%d\n",walk_res, idx);
@@ -489,10 +489,20 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, char* longest_wa
                 else 
                     atomicAdd(&term_counts[2], 1);
                 // otherwise walk must end with a fork or repeat, so upshift
-                if (shift == -LASSM_SHIFT_SIZE)
+                if (shift == -LASSM_SHIFT_SIZE){
+                    #ifdef DEBUG_PRINT_GPU
+                    printf("breaking at shift neg:%d\n", shift);
+                    #endif
                     break;
-                if (mer_len > loc_ctg.length)
+                    }
+                if (mer_len > loc_ctg.length){
+                    #ifdef DEBUG_PRINT_GPU
+                    printf("breaking at mer_len too large:%d\n", mer_len);
+                    #endif
                     break;
+                }
+                if(walk_res == 'R')
+                    longest_walk_thread.length = 0;// TODO: DOUBLE CHECK WITH STEVE IF THIS IS CORRECT
                 shift = LASSM_SHIFT_SIZE;
             }
 
