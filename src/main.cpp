@@ -26,7 +26,7 @@ int main (int argc, char* argv[]){
     print_vals("total exts:",data_in.size());
         timer final_time;
     final_time.timer_start();
-    int slice_size = 10000;
+    int slice_size = 15000;
     int iterations = (data_in.size() + slice_size)/slice_size;
     // print_vals("Total Contigs:", data_in.size());
     // print_vals("Slices:", iterations);
@@ -41,7 +41,7 @@ int main (int argc, char* argv[]){
 
         print_vals("*** NEW SLICE LAUNCHING ***","Current slice size:", slice_data.size(), "Slice ID:",i);
         print_vals("max:",max_r_count);
-        call_kernel(slice_data, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count, 121, 251);
+        call_kernel(slice_data, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count, 121, 246);
     }
     
 
@@ -80,7 +80,7 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     int* final_walk_lens_r_h = new int[vec_size];
     int* final_walk_lens_l_h = new int[vec_size]; // not needed on device, will re use right walk memory
 
-    int max_mer_len = 33;
+    int max_mer_len = 77;
 
     //compute total device memory required:
     size_t total_dev_mem = sizeof(int32_t) * vec_size * 4 + sizeof(int32_t) * total_l_reads
@@ -218,10 +218,10 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     print_vals("Calling Kernel with blocks:", blocks, "Threads:", thread_per_blk);
     int64_t sum_ext, num_walks;
     timer kernel_time;
-
+    uint32_t qual_offset = 33;
     kernel_time.timer_start();
     iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
-    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
+    depth_d, d_ht, d_ht_bool, max_mer_len, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, qual_offset, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
     CUDA_CHECK(cudaDeviceSynchronize());
     kernel_time.timer_end();
     double right_kernel_time = kernel_time.get_total_time();
@@ -316,7 +316,7 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     // launching kernel by swapping right and left reads, TODO: make this correct
     kernel_time.timer_start();
     iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_right_d, reads_left_d, quals_left_d, quals_right_d, reads_r_offset_d, reads_l_offset_d, rds_r_cnt_offset_d, rds_l_cnt_offset_d, 
-    depth_d, d_ht, d_ht_bool, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
+    depth_d, d_ht, d_ht_bool, max_mer_len, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, qual_offset, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
     CUDA_CHECK(cudaDeviceSynchronize());
     kernel_time.timer_end();
     double left_kernel_time = kernel_time.get_total_time();
@@ -329,9 +329,9 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     transfer_time += gpu_transfer.get_total_time();
     #ifdef DEBUG_PRINT_CPU
         print_vals("printing walks for left extension:");
-        print_vals("longest walk for contig 0 has length:", final_walk_lens_l_h[0]);
-        for(int i = 0; i < final_walk_lens_l_h[0]; i++){
-            std::cout<<longest_walks_l_h[i];
+        print_vals("longest walk for contig 629 has length:", final_walk_lens_l_h[629]);
+        for(int i = 0; i < final_walk_lens_l_h[629]; i++){
+            std::cout<<longest_walks_l_h[max_walk_len*628 + i];
         }
         std::cout<<std::endl;
         print_vals("longest walk for contig 1 has length:", final_walk_lens_l_h[1]);
