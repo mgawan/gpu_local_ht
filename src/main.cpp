@@ -7,13 +7,11 @@
 #include <fstream>
 #include "helper.hpp"
 #include "kernel.hpp"
-#define TOT_THREADS 1
-#define KMER_SZ 4
 
 double total_data_time = 0;
 double total_kernel_time = 0;
 
-std::ofstream ofile("contig-test-1.dat");
+std::ofstream ofile("contig-test.dat");
 void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count, int insert_avg, int insert_stddev);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
@@ -26,7 +24,7 @@ int main (int argc, char* argv[]){
     print_vals("total exts:",data_in.size());
         timer final_time;
     final_time.timer_start();
-    int slice_size = 15000;
+    int slice_size = 10000;
     int iterations = (data_in.size() + slice_size)/slice_size;
     // print_vals("Total Contigs:", data_in.size());
     // print_vals("Slices:", iterations);
@@ -80,7 +78,7 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     int* final_walk_lens_r_h = new int[vec_size];
     int* final_walk_lens_l_h = new int[vec_size]; // not needed on device, will re use right walk memory
 
-    int max_mer_len = 77;
+    int max_mer_len = 21;
 
     //compute total device memory required:
     size_t total_dev_mem = sizeof(int32_t) * vec_size * 4 + sizeof(int32_t) * total_l_reads
@@ -412,5 +410,26 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
    // print_vals("Total rec comp Time:", rev_comp_.get_total_time());
    // print_vals("Total Data packing time:", data_packing.get_total_time());
     print_vals("Total Cuda malloc time:", cuda_alloc_time.get_total_time());
+
+    delete[] cid_h;
+    delete[] ctg_seqs_h;
+    delete[] ctgs_seqs_rc_h;// not requried on GPU, ctg space will be re-used
+    delete[] ctg_seq_offsets_h;
+    delete[] depth_h; 
+    delete[] reads_left_h;
+    delete[] reads_right_h;
+    delete[] quals_right_h;
+    delete[] quals_left_h;
+    delete[] reads_l_offset_h;
+    delete[] reads_r_offset_h;
+    delete[] rds_l_cnt_offset_h;
+    delete[] rds_r_cnt_offset_h;
+    delete[] quals_l_offset_h;
+    delete[] quals_r_offset_h;
+    delete[] term_counts_h;
+    delete[] longest_walks_r_h;
+    delete[] longest_walks_l_h; // not needed on device, will re-use right walk memory
+    delete[] final_walk_lens_r_h;
+    delete[] final_walk_lens_l_h; // not needed on device, will re use right walk memory
 
 }

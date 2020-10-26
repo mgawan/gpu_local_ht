@@ -432,7 +432,6 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
     cstr_type longest_walk_thread(longest_walk_loc,0);
 
     //main for loop
-    //TODO: commenting out the main for loop for testing count_mers
     int shift = 0;
     for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
             #ifdef DEBUG_PRINT_GPU
