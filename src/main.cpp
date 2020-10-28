@@ -11,6 +11,18 @@
 double total_data_time = 0;
 double total_kernel_time = 0;
 
+size_t get_device_mem(){
+    int gpus;
+    size_t free_mem, total_mem;
+    cudaGetDeviceCount(&gpus);
+    for ( int id = 0; id < gpus; id++ ) {
+        cudaSetDevice(id);
+        cudaMemGetInfo(&free_mem, &total_mem);
+        std::cout << "GPU: " << id << " has free memory (bytes):=" << free_mem << ", out of total (bytes):=" << total_mem << std::endl;
+    }
+    return free_mem;
+}
+
 std::ofstream ofile("contig-test.dat");
 void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count, int insert_avg, int insert_stddev);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
@@ -21,33 +33,121 @@ int main (int argc, char* argv[]){
     std::vector<CtgWithReads> data_in;
     int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size,max_r_count, max_l_count);
-    print_vals("total exts:",data_in.size());
-        timer final_time;
-    final_time.timer_start();
-    int slice_size = 10000;
-    int iterations = (data_in.size() + slice_size)/slice_size;
-    // print_vals("Total Contigs:", data_in.size());
-    // print_vals("Slices:", iterations);
-    
-    for(int i = 0; i < iterations; i++){
-        int left_over;
-        if(iterations - 1 == i)
-            left_over = data_in.size() % slice_size;
-        else
-            left_over = slice_size;
-        std::vector<CtgWithReads> slice_data (&data_in[i*slice_size], &data_in[i*slice_size + left_over]);
+    int tot_extenions = data_in.size();
+    int32_t max_read_count = max_r_count>max_l_count ? max_r_count : max_l_count;
+    int insert_avg = 121;
+    int insert_stddev = 246;
+    int max_walk_len = insert_avg + 2 * insert_stddev;
+    int max_mer_len = 21;
+    size_t gpu_mem_req = sizeof(int32_t) * tot_extenions * 4 + sizeof(int32_t) * total_l_reads
+                           + sizeof(int32_t) * total_r_reads + sizeof(char) * max_ctg_size * tot_extenions
+                           + sizeof(char) * total_l_reads * max_read_size + sizeof(char) * total_r_reads * max_read_size
+                           + sizeof(double) * tot_extenions + sizeof(char) * total_r_reads * max_read_size 
+                           + sizeof(char) * total_l_reads * max_read_size + sizeof(int64_t)*3
+                           + sizeof(loc_ht)*(max_read_size*max_read_count)*tot_extenions
+                           + sizeof(char)*tot_extenions * max_walk_len
+                           + (max_mer_len + max_walk_len) * sizeof(char) * tot_extenions
+                           + sizeof(int) * tot_extenions;
+    size_t gpu_mem_avail = get_device_mem();
+    int iterations = ((double)gpu_mem_req + (gpu_mem_avail*0.8))/(gpu_mem_avail*0.8); // 0.8 is to buffer for the extra mem that is used when allocating once and using again
+    print_vals("Iterations:", iterations);
+    int slice_size = (tot_extenions + iterations)/iterations;
+    print_vals("slice size:", slice_size);
+//allocating maximum possible memory for a single iteration
 
-        print_vals("*** NEW SLICE LAUNCHING ***","Current slice size:", slice_data.size(), "Slice ID:",i);
-        print_vals("max:",max_r_count);
-        call_kernel(slice_data, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count, 121, 246);
-    }
+    int32_t *cid_h = new int32_t[slice_size];
+    char *ctg_seqs_h = new char[max_ctg_size * slice_size];
+    char * ctgs_seqs_rc_h = new char[max_ctg_size * slice_size];// revcomps not requried on GPU, ctg space will be re-used on GPU, but if we want to do right left extensions in parallel, then we need separate space on GPU
+    int32_t *ctg_seq_offsets_h = new int32_t[slice_size];
+    double *depth_h = new double[slice_size];
+    char *reads_left_h = new char[max_l_count * max_read_size * slice_size]; 
+    char *reads_right_h = new char[max_r_count * max_read_size * slice_size];
+    char *quals_right_h = new char[max_r_count * max_read_size * slice_size];
+    char *quals_left_h = new char[max_l_count * max_read_size * slice_size];
+    int32_t *reads_l_offset_h = new int32_t[max_l_count* slice_size];
+    int32_t *reads_r_offset_h = new int32_t[max_r_count * slice_size];
+    int32_t *rds_l_cnt_offset_h = new int32_t[slice_size];
+    int32_t *rds_r_cnt_offset_h = new int32_t[slice_size];
+    int32_t *term_counts_h = new int32_t[3];
+    char* longest_walks_r_h = new char[slice_size * max_walk_len];
+    char* longest_walks_l_h = new char[slice_size * max_walk_len]; // not needed on device, will re-use right walk memory
+    int* final_walk_lens_r_h = new int[slice_size];
+    int* final_walk_lens_l_h = new int[slice_size]; // not needed on device, will re use right walk memory
+
+    int32_t *cid_d, *ctg_seq_offsets_d, *reads_l_offset_d, *reads_r_offset_d; 
+    int32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d;
+    char *ctg_seqs_d, *reads_left_d, *reads_right_d, *quals_left_d, *quals_right_d;
+    char *longest_walks_d, *mer_walk_temp_d;
+    double *depth_d;
+    int32_t *term_counts_d;
+    loc_ht *d_ht;
+    loc_ht_bool *d_ht_bool;
+    int* final_walk_lens_d;
+    //allocate GPU  memory
+    CUDA_CHECK(cudaMalloc(&cid_d, sizeof(int32_t) * slice_size));
+    CUDA_CHECK(cudaMalloc(&ctg_seq_offsets_d, sizeof(int32_t) * slice_size));
+    CUDA_CHECK(cudaMalloc(&reads_l_offset_d, sizeof(int32_t) * max_l_count * slice_size));
+    CUDA_CHECK(cudaMalloc(&reads_r_offset_d, sizeof(int32_t) * max_r_count * slice_size));
+    CUDA_CHECK(cudaMalloc(&rds_l_cnt_offset_d, sizeof(int32_t) * slice_size));
+    CUDA_CHECK(cudaMalloc(&rds_r_cnt_offset_d, sizeof(int32_t) * slice_size));
+    CUDA_CHECK(cudaMalloc(&ctg_seqs_d, sizeof(char) * max_ctg_size * slice_size));
+    CUDA_CHECK(cudaMalloc(&reads_left_d, sizeof(char) * max_l_count * max_read_size * slice_size));
+    CUDA_CHECK(cudaMalloc(&reads_right_d, sizeof(char) * max_r_count * max_read_size * slice_size));
+    CUDA_CHECK(cudaMalloc(&depth_d, sizeof(double) * slice_size));
+    CUDA_CHECK(cudaMalloc(&quals_right_d, sizeof(char) * max_r_count * max_read_size * slice_size));
+    CUDA_CHECK(cudaMalloc(&quals_left_d, sizeof(char) * max_l_count * max_read_size * slice_size));
+    CUDA_CHECK(cudaMalloc(&term_counts_d, sizeof(int64_t)*3));
+    // if we separate out kernels for right and left walks then we can use r_count/l_count separately but for now use the max of two
+    // also subtract the appropriate kmer length from max_read_size to reduce memory footprint of global ht_loc.
+    // one local hashtable for each thread, so total hash_tables equal to vec_size i.e. total contigs
+    // TODO: to account for overfilling of the hashtable, consider assuming load factor of 0.8 and add a cushion of memory in hashtable
+    CUDA_CHECK(cudaMalloc(&d_ht, sizeof(loc_ht)*(max_read_size*max_read_count)*slice_size)); 
+    //TODO: come back to this and see if we can find a better approximation of longest walk size
+    CUDA_CHECK(cudaMalloc(&longest_walks_d, sizeof(char)*slice_size * max_walk_len));
+    CUDA_CHECK(cudaMalloc(&mer_walk_temp_d, (max_mer_len + max_walk_len) * sizeof(char) * slice_size));
+    CUDA_CHECK(cudaMalloc(&d_ht_bool, sizeof(loc_ht_bool) * slice_size * max_walk_len));
+    CUDA_CHECK(cudaMalloc(&final_walk_lens_d, sizeof(int) * slice_size));
+
+
+    gpu_mem_req = sizeof(int32_t) * slice_size * 4 + sizeof(int32_t) * total_l_reads
+                           + sizeof(int32_t) * max_l_count * slice_size * 2
+                           + sizeof(char) * max_ctg_size * tot_extenions
+                           + sizeof(char) * max_l_count * max_read_size * slice_size * 2
+                           + sizeof(char) * max_r_count * max_read_size * slice_size * 2
+                           + sizeof(double) * slice_size 
+                           + sizeof(int64_t) * 3
+                           + sizeof(loc_ht) * (max_read_size*max_read_count)*slice_size
+                           + sizeof(char) * slice_size * max_walk_len
+                           + (max_mer_len + max_walk_len) * sizeof(char) * slice_size
+                           + sizeof(int) * slice_size;
+    print_vals("actual device mem per iteration:", gpu_mem_req);
+
+    // timer final_time;
+    // final_time.timer_start();
+    // int slice_size = 10000;
+    // int iterations = (data_in.size() + slice_size)/slice_size;
+    // // print_vals("Total Contigs:", data_in.size());
+    // // print_vals("Slices:", iterations);
+    
+    // for(int i = 0; i < iterations; i++){
+    //     int left_over;
+    //     if(iterations - 1 == i)
+    //         left_over = data_in.size() % slice_size;
+    //     else
+    //         left_over = slice_size;
+    //     std::vector<CtgWithReads> slice_data (&data_in[i*slice_size], &data_in[i*slice_size + left_over]);
+
+    //     print_vals("*** NEW SLICE LAUNCHING ***","Current slice size:", slice_data.size(), "Slice ID:",i);
+    //     print_vals("max:",max_r_count);
+    //     call_kernel(slice_data, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count, 121, 246);
+//     }
     
 
-  //TODO: free up memory
-  final_time.timer_end();
-  print_vals("Total Overall Time:", final_time.get_total_time());
-  print_vals("Total Data Transfer Time:", total_data_time);
-  print_vals("Total Kernel Time:", total_kernel_time);
+//   //TODO: free up memory
+//   final_time.timer_end();
+//   print_vals("Total Overall Time:", final_time.get_total_time());
+//   print_vals("Total Data Transfer Time:", total_data_time);
+//   print_vals("Total Kernel Time:", total_kernel_time);
     return 0;
 }
 
@@ -70,8 +170,6 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     int32_t *reads_r_offset_h = new int32_t[total_r_reads];
     int32_t *rds_l_cnt_offset_h = new int32_t[vec_size];
     int32_t *rds_r_cnt_offset_h = new int32_t[vec_size];
-    int32_t *quals_l_offset_h = new int32_t[total_l_reads];
-    int32_t *quals_r_offset_h = new int32_t[total_r_reads];
     int32_t *term_counts_h = new int32_t[3];
     char* longest_walks_r_h = new char[vec_size * max_walk_len];
     char* longest_walks_l_h = new char[vec_size * max_walk_len]; // not needed on device, will re-use right walk memory
@@ -424,8 +522,6 @@ void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32
     delete[] reads_r_offset_h;
     delete[] rds_l_cnt_offset_h;
     delete[] rds_r_cnt_offset_h;
-    delete[] quals_l_offset_h;
-    delete[] quals_r_offset_h;
     delete[] term_counts_h;
     delete[] longest_walks_r_h;
     delete[] longest_walks_l_h; // not needed on device, will re-use right walk memory
