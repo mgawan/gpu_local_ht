@@ -11,7 +11,8 @@
 double total_data_time = 0;
 double total_kernel_time = 0;
 
-std::ofstream ofile("contig-test.dat");
+std::ofstream ofile("contig-test.dat");///
+
 void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count, int insert_avg, int insert_stddev);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
@@ -21,10 +22,10 @@ int main (int argc, char* argv[]){
     std::vector<CtgWithReads> data_in;
     int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size,max_r_count, max_l_count);
-    print_vals("total exts:",data_in.size());
-        timer final_time;
+    ///print_vals("total exts:",data_in.size());
+    timer final_time;
     final_time.timer_start();
-    int slice_size = 10000;
+    int slice_size = 40000;
     int iterations = (data_in.size() + slice_size)/slice_size;
     // print_vals("Total Contigs:", data_in.size());
     // print_vals("Slices:", iterations);
@@ -48,6 +49,8 @@ int main (int argc, char* argv[]){
   print_vals("Total Overall Time:", final_time.get_total_time());
   print_vals("Total Data Transfer Time:", total_data_time);
   print_vals("Total Kernel Time:", total_kernel_time);
+  ofile.flush();
+  ofile.close();
     return 0;
 }
 
