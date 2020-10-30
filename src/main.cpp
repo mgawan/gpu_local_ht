@@ -143,9 +143,9 @@ int main (int argc, char* argv[]){
 
         print_vals("Starting Data Packing");
 
-        int32_t ctgs_offset_sum = 0;
-        int32_t reads_r_offset_sum = 0;
-        int32_t reads_l_offset_sum = 0;
+        uint32_t ctgs_offset_sum = 0;
+        uint32_t reads_r_offset_sum = 0;
+        uint32_t reads_l_offset_sum = 0;
         int read_l_index = 0, read_r_index = 0;
 
         for(int i = 0; i < slice_data.size(); i++){
@@ -183,25 +183,28 @@ int main (int argc, char* argv[]){
             rds_r_cnt_offset_h[i] = read_r_index; // running sum of right reads count
         }// data packing for loop ends
 
+        int total_r_reads_slice = read_r_index;
+        int total_l_reads_slice = read_l_index;
+
         for(int i = 0; i < 3; i++){
             term_counts_h[i] = 0;
         }
 
 
         print_vals("Host to Device Transfer...");
-
+        //TODO: get rid of offsets by keeping uniform space between contigs, reads, this will reduce data movements.
         CUDA_CHECK(cudaMemcpy(cid_d, cid_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(ctg_seq_offsets_d, ctg_seq_offsets_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(reads_l_offset_d, reads_l_offset_h, sizeof(int32_t) * total_l_reads, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(reads_r_offset_d, reads_r_offset_h, sizeof(int32_t) * total_r_reads, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(reads_l_offset_d, reads_l_offset_h, sizeof(int32_t) * total_l_reads_slice, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(reads_r_offset_d, reads_r_offset_h, sizeof(int32_t) * total_r_reads_slice, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(rds_l_cnt_offset_d, rds_l_cnt_offset_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(rds_r_cnt_offset_d, rds_r_cnt_offset_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(ctg_seqs_d, ctg_seqs_h, sizeof(char) * max_ctg_size * vec_size, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(reads_left_d, reads_left_h, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(reads_right_d, reads_right_h, sizeof(char) * total_r_reads * max_read_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(ctg_seqs_d, ctg_seqs_h, sizeof(char) * ctgs_offset_sum, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(reads_left_d, reads_left_h, sizeof(char) * reads_l_offset_sum, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(reads_right_d, reads_right_h, sizeof(char) * reads_r_offset_sum, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(depth_d, depth_h, sizeof(double) * vec_size, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(quals_right_d, quals_right_h, sizeof(char) * total_r_reads * max_read_size, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(quals_left_d, quals_left_h, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(quals_right_d, quals_right_h, sizeof(char) * reads_r_offset_sum, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(quals_left_d, quals_left_h, sizeof(char) * reads_l_offset_sum, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(term_counts_d, term_counts_h, sizeof(int32_t)*3, cudaMemcpyHostToDevice));
 
     }// the big for loop over all slices ends here
