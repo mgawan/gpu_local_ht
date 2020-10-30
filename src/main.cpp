@@ -32,7 +32,7 @@ int main (int argc, char* argv[]){
     std::string in_file = argv[1];
     std::vector<CtgWithReads> data_in;
     int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
-    read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size,max_r_count, max_l_count);
+    read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count);
     int tot_extenions = data_in.size();
     int32_t max_read_count = max_r_count>max_l_count ? max_r_count : max_l_count;
     int insert_avg = 121;
@@ -120,8 +120,91 @@ int main (int argc, char* argv[]){
                            + sizeof(char) * slice_size * max_walk_len
                            + (max_mer_len + max_walk_len) * sizeof(char) * slice_size
                            + sizeof(int) * slice_size;
-    print_vals("actual device mem per iteration:", gpu_mem_req);
+    print_vals("actual device mem per iteration (max):", gpu_mem_req);
 
+
+//start a loop here which takes a slice of data_in
+//performs data packing on that slice on cpu memory
+//and then moves that data to allocated GPU memory
+//calls the kernels, revcomps, copy backs walks and
+//rinse repeats till all slices are done.
+
+    for(int slice = 0; slice < iterations; slice++){
+
+        int vec_size = slice_data.size();
+        int left_over;
+        if(iterations - 1 == slice)
+            left_over = data_in.size() % slice_size;
+        else
+            left_over = slice_size;
+        std::vector<CtgWithReads> slice_data (&data_in[slice*slice_size], &data_in[slice*slice_size + left_over]);
+        
+    
+
+        print_vals("Starting Data Packing");
+
+        int32_t ctgs_offset_sum = 0;
+        int32_t reads_r_offset_sum = 0;
+        int32_t reads_l_offset_sum = 0;
+        int read_l_index = 0, read_r_index = 0;
+
+        for(int i = 0; i < slice_data.size(); i++){
+            CtgWithReads temp_data = slice_data[i];
+            cid_h[i] = temp_data.cid;
+            depth_h[i] = temp_data.depth;
+            //convert string to c-string
+            char *ctgs_ptr = ctg_seqs_h + ctgs_offset_sum;
+            memcpy(ctgs_ptr, temp_data.seq.c_str(), temp_data.seq.size());
+            ctgs_offset_sum += temp_data.seq.size();
+            ctg_seq_offsets_h[i] = ctgs_offset_sum;
+
+            for(int j = 0; j < temp_data.reads_left.size(); j++){
+                char *reads_l_ptr = reads_left_h + reads_l_offset_sum;
+                char *quals_l_ptr = quals_left_h + reads_l_offset_sum;
+                memcpy(reads_l_ptr, temp_data.reads_left[j].seq.c_str(), temp_data.reads_left[j].seq.size());
+                //quals offsets will be same as reads offset because quals and reads have same length
+                memcpy(quals_l_ptr, temp_data.reads_left[j].quals.c_str(), temp_data.reads_left[j].quals.size());
+                reads_l_offset_sum += temp_data.reads_left[j].seq.size();
+                reads_l_offset_h[read_l_index] = reads_l_offset_sum;
+                read_l_index++;
+            }
+            rds_l_cnt_offset_h[i] = read_l_index; // running sum of left reads count
+
+            for(int j = 0; j < temp_data.reads_right.size(); j++){
+                char *reads_r_ptr = reads_right_h + reads_r_offset_sum;
+                char *quals_r_ptr = quals_right_h + reads_r_offset_sum;
+                memcpy(reads_r_ptr, temp_data.reads_right[j].seq.c_str(), temp_data.reads_right[j].seq.size());
+                //quals offsets will be same as reads offset because quals and reads have same length
+                memcpy(quals_r_ptr, temp_data.reads_right[j].quals.c_str(), temp_data.reads_right[j].quals.size());
+                reads_r_offset_sum += temp_data.reads_right[j].seq.size();
+                reads_r_offset_h[read_r_index] = reads_r_offset_sum;
+                read_r_index++;
+            }
+            rds_r_cnt_offset_h[i] = read_r_index; // running sum of right reads count
+        }// data packing for loop ends
+
+        for(int i = 0; i < 3; i++){
+            term_counts_h[i] = 0;
+        }
+
+
+        print_vals("Host to Device Transfer...");
+
+        CUDA_CHECK(cudaMemcpy(cid_d, cid_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(ctg_seq_offsets_d, ctg_seq_offsets_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(reads_l_offset_d, reads_l_offset_h, sizeof(int32_t) * total_l_reads, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(reads_r_offset_d, reads_r_offset_h, sizeof(int32_t) * total_r_reads, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(rds_l_cnt_offset_d, rds_l_cnt_offset_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(rds_r_cnt_offset_d, rds_r_cnt_offset_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(ctg_seqs_d, ctg_seqs_h, sizeof(char) * max_ctg_size * vec_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(reads_left_d, reads_left_h, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(reads_right_d, reads_right_h, sizeof(char) * total_r_reads * max_read_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(depth_d, depth_h, sizeof(double) * vec_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(quals_right_d, quals_right_h, sizeof(char) * total_r_reads * max_read_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(quals_left_d, quals_left_h, sizeof(char) * total_l_reads * max_read_size, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(term_counts_d, term_counts_h, sizeof(int32_t)*3, cudaMemcpyHostToDevice));
+
+    }// the big for loop over all slices ends here
     // timer final_time;
     // final_time.timer_start();
     // int slice_size = 10000;
