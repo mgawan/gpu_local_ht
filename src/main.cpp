@@ -38,7 +38,7 @@ int main (int argc, char* argv[]){
     int insert_avg = 121;
     int insert_stddev = 246;
     int max_walk_len = insert_avg + 2 * insert_stddev;
-    int max_mer_len = 21;
+    int max_mer_len = 77;
     size_t gpu_mem_req = sizeof(int32_t) * tot_extensions * 4 + sizeof(int32_t) * total_l_reads
                            + sizeof(int32_t) * total_r_reads + sizeof(char) * max_ctg_size * tot_extensions
                            + sizeof(char) * total_l_reads * max_read_size + sizeof(char) * total_r_reads * max_read_size
@@ -50,7 +50,7 @@ int main (int argc, char* argv[]){
                            + sizeof(loc_ht_bool) * tot_extensions * max_walk_len
                            + sizeof(int) * tot_extensions;
 
-    print_vals("Total GPU mem required (MB):", (double)gpu_mem_req/(1024*1024));                     
+    print_vals("Total GPU mem required (GBs):", (double)gpu_mem_req/(1024*1024*1024));                     
     size_t gpu_mem_avail = get_device_mem();
     float factor = 0.8;
     print_vals("GPU Mem using (MB):",((double)gpu_mem_avail*factor)/(1024*1024)); 
@@ -61,6 +61,7 @@ int main (int argc, char* argv[]){
     print_vals("slice size:", slice_size);
     slice_size = slice_size + remaining; // this is the largest slice size, mostly the last iteration handles the leftovers
 //allocating maximum possible memory for a single iteration
+    print_vals("slice size:", slice_size);
 
     int32_t *cid_h = new int32_t[slice_size];
     char *ctg_seqs_h = new char[max_ctg_size * slice_size];
@@ -138,7 +139,9 @@ int main (int argc, char* argv[]){
 //and then moves that data to allocated GPU memory
 //calls the kernels, revcomps, copy backs walks and
 //rinse repeats till all slices are done.
-
+    timer loop_time;
+    loop_time.timer_start();
+    slice_size = tot_extensions/iterations;
     for(int slice = 0; slice < iterations; slice++){
         print_vals("Done(%):", ((double)slice/iterations)*100);
         int left_over;
@@ -148,6 +151,7 @@ int main (int argc, char* argv[]){
             left_over = 0;
         std::vector<CtgWithReads> slice_data (&data_in[slice*slice_size], &data_in[(slice + 1)*slice_size + left_over]);
         int vec_size = slice_data.size();
+        print_vals("current_slice size:", vec_size);
         
     
 
@@ -231,9 +235,7 @@ int main (int argc, char* argv[]){
         //TODO: pass only the read that needs to be extended, change the related code inside the kernel as well.
         iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
         depth_d, d_ht, d_ht_bool, max_mer_len, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, qual_offset, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
-        CUDA_CHECK(cudaDeviceSynchronize());
-        CUDA_CHECK(cudaMemcpy(longest_walks_r_h + slice * max_walk_len * slice_size, longest_walks_d, sizeof(char) * vec_size * max_walk_len, cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(final_walk_lens_r_h + slice * slice_size, final_walk_lens_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); 
+      //  CUDA_CHECK(cudaDeviceSynchronize());
 
         //perform revcomp of contig sequences and launch kernel with left reads, TODO: move right and left reads data separately
         print_vals("revcomp-ing the contigs for next kernel");
@@ -266,6 +268,8 @@ int main (int argc, char* argv[]){
             #endif   
 
         }
+        CUDA_CHECK(cudaMemcpy(longest_walks_r_h + slice * max_walk_len * slice_size, longest_walks_d, sizeof(char) * vec_size * max_walk_len, cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(final_walk_lens_r_h + slice * slice_size, final_walk_lens_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); 
 
       //  rev_comp_.timer_end();
 
@@ -289,12 +293,14 @@ int main (int argc, char* argv[]){
      //   gpu_transfer.timer_end();
 
     }// the big for loop over all slices ends here
+loop_time.timer_end();
+print_vals("Total Loop Time:", loop_time.get_total_time());
 
 //once all the alignments are on cpu, then go through them and stitch them with contigs in front and back.
 
   int loc_left_over = tot_extensions % iterations;
   for(int j = 0; j < iterations; j++){
-    int loc_size = (j == iterations - 1)? slice_size : slice_size + loc_left_over;
+    int loc_size = (j == iterations - 1) ? slice_size + loc_left_over : slice_size;
 
     //TODO: a lot of multiplications in below loop can be optimized (within in indices)
     for(int i = 0; i< loc_size; i++){
