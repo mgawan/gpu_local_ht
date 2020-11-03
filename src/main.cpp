@@ -23,7 +23,7 @@ size_t get_device_mem(){
     return free_mem;
 }
 
-std::ofstream ofile("contig-test.dat");
+std::ofstream ofile("/global/cscratch1/sd/mgawan/loc_assem_test-2/merged/results/results-test.dat");
 void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count, int insert_avg, int insert_stddev);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
@@ -50,9 +50,11 @@ int main (int argc, char* argv[]){
                            + sizeof(loc_ht_bool) * tot_extensions * max_walk_len
                            + sizeof(int) * tot_extensions;
 
-    print_vals("Total GPU mem required (MB):", (double)gpu_mem_req/(1024*1024));                      
+    print_vals("Total GPU mem required (MB):", (double)gpu_mem_req/(1024*1024));                     
     size_t gpu_mem_avail = get_device_mem();
-    int iterations = ceil(((double)gpu_mem_req)/(gpu_mem_avail*0.8)); // 0.8 is to buffer for the extra mem that is used when allocating once and using again
+    float factor = 0.8;
+    print_vals("GPU Mem using (MB):",((double)gpu_mem_avail*factor)/(1024*1024)); 
+    int iterations = ceil(((double)gpu_mem_req)/((double)gpu_mem_avail*factor)); // 0.8 is to buffer for the extra mem that is used when allocating once and using again
     print_vals("Iterations:", iterations);
     int slice_size = tot_extensions/iterations;
     int remaining = tot_extensions % iterations;
@@ -78,6 +80,23 @@ int main (int argc, char* argv[]){
     char* longest_walks_l_h = new char[slice_size * max_walk_len * iterations]; // not needed on device, will re-use right walk memory
     int* final_walk_lens_r_h = new int[slice_size * iterations]; // reserve memory for all the walks.
     int* final_walk_lens_l_h = new int[slice_size * iterations]; // not needed on device, will re use right walk memory
+
+
+    gpu_mem_req = sizeof(int32_t) * slice_size * 4 + sizeof(int32_t) * total_l_reads
+                           + sizeof(int32_t) * max_l_count * slice_size
+                           + sizeof(int32_t) * max_r_count * slice_size
+                           + sizeof(char) * max_ctg_size * slice_size
+                           + sizeof(char) * max_l_count * max_read_size * slice_size * 2
+                           + sizeof(char) * max_r_count * max_read_size * slice_size * 2
+                           + sizeof(double) * slice_size 
+                           + sizeof(int64_t) * 3
+                           + sizeof(loc_ht) * (max_read_size*max_read_count)*slice_size
+                           + sizeof(char) * slice_size * max_walk_len
+                           + (max_mer_len + max_walk_len) * sizeof(char) * slice_size
+                           + sizeof(loc_ht_bool) * slice_size * max_walk_len
+                           + sizeof(int) * slice_size;
+    print_vals("Device Mem requesting per slice (MB):", (double)gpu_mem_req/ (1024*1024));
+
 
     int32_t *cid_d, *ctg_seq_offsets_d, *reads_l_offset_d, *reads_r_offset_d; 
     int32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d;
@@ -114,22 +133,6 @@ int main (int argc, char* argv[]){
     CUDA_CHECK(cudaMalloc(&final_walk_lens_d, sizeof(int) * slice_size));
 
 
-    gpu_mem_req = sizeof(int32_t) * slice_size * 4 + sizeof(int32_t) * total_l_reads
-                           + sizeof(int32_t) * max_l_count * slice_size
-                           + sizeof(int32_t) * max_r_count * slice_size
-                           + sizeof(char) * max_ctg_size * slice_size
-                           + sizeof(char) * max_l_count * max_read_size * slice_size * 2
-                           + sizeof(char) * max_r_count * max_read_size * slice_size * 2
-                           + sizeof(double) * slice_size 
-                           + sizeof(int64_t) * 3
-                           + sizeof(loc_ht) * (max_read_size*max_read_count)*slice_size
-                           + sizeof(char) * slice_size * max_walk_len
-                           + (max_mer_len + max_walk_len) * sizeof(char) * slice_size
-                           + sizeof(loc_ht_bool) * slice_size * max_walk_len
-                           + sizeof(int) * slice_size;
-    print_vals("Device Mem reserved per slice (MB):", (double)gpu_mem_req/ (1024*1024));
-
-
 //start a loop here which takes a slice of data_in
 //performs data packing on that slice on cpu memory
 //and then moves that data to allocated GPU memory
@@ -137,6 +140,7 @@ int main (int argc, char* argv[]){
 //rinse repeats till all slices are done.
 
     for(int slice = 0; slice < iterations; slice++){
+        print_vals("Done(%):", ((double)slice/iterations)*100);
         int left_over;
         if(iterations - 1 == slice)
             left_over = tot_extensions % iterations;
@@ -297,13 +301,13 @@ int main (int argc, char* argv[]){
         if(final_walk_lens_l_h[j*slice_size + i] != 0){
             std::string left(&longest_walks_l_h[j*slice_size*max_walk_len + max_walk_len*i],final_walk_lens_l_h[j*slice_size + i]);
             std::string left_rc = revcomp(left);
-            data_in[i].seq.insert(0,left_rc);  
+            data_in[j*slice_size + i].seq.insert(0,left_rc);  
         }
         if(final_walk_lens_r_h[j*slice_size + i] != 0){
             std::string right(&longest_walks_r_h[j*slice_size*max_walk_len + max_walk_len*i],final_walk_lens_r_h[j*slice_size + i]);
-            data_in[i].seq += right;
+            data_in[j*slice_size + i].seq += right;
         }
-        ofile << data_in[i].cid<<" "<<data_in[i].seq<<std::endl;
+        ofile << data_in[j*slice_size + i].cid<<" "<<data_in[j*slice_size + i].seq<<std::endl;
     }
   }
   ofile.flush();
