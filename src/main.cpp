@@ -23,13 +23,18 @@ size_t get_device_mem(){
     return free_mem;
 }
 
-std::ofstream ofile("/global/cscratch1/sd/mgawan/loc_assem_test-2/merged/results/results-test.dat");
+//std::ofstream ofile("contig-test.dat");
 void call_kernel(std::vector<CtgWithReads>& data_in, int32_t max_ctg_size, int32_t total_r_reads, int32_t total_l_reads, int32_t max_read_size, int32_t max_r_count, int32_t max_l_count, int insert_avg, int insert_stddev);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
+// sample cmd line: ./build/ht_loc ../locassm_data/localassm_extend_7-21.dat ./out_file <kmer_size>
 int main (int argc, char* argv[]){
 
     std::string in_file = argv[1];
+    std::string out_file = argv[2];
+    int max_mer_len = std::stoi(argv[3]);
+
+    std::ofstream ofile(out_file);
     std::vector<CtgWithReads> data_in;
     int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count);
@@ -38,7 +43,6 @@ int main (int argc, char* argv[]){
     int insert_avg = 121;
     int insert_stddev = 246;
     int max_walk_len = insert_avg + 2 * insert_stddev;
-    int max_mer_len = 77;
     size_t gpu_mem_req = sizeof(int32_t) * tot_extensions * 4 + sizeof(int32_t) * total_l_reads
                            + sizeof(int32_t) * total_r_reads + sizeof(char) * max_ctg_size * tot_extensions
                            + sizeof(char) * total_l_reads * max_read_size + sizeof(char) * total_r_reads * max_read_size
@@ -52,7 +56,7 @@ int main (int argc, char* argv[]){
 
     print_vals("Total GPU mem required (GBs):", (double)gpu_mem_req/(1024*1024*1024));                     
     size_t gpu_mem_avail = get_device_mem();
-    float factor = 0.9;
+    float factor = 0.90;
     print_vals("GPU Mem using (MB):",((double)gpu_mem_avail*factor)/(1024*1024)); 
     int iterations = ceil(((double)gpu_mem_req)/((double)gpu_mem_avail*factor)); // 0.8 is to buffer for the extra mem that is used when allocating once and using again
     print_vals("Iterations:", iterations);
@@ -83,14 +87,13 @@ int main (int argc, char* argv[]){
     int* final_walk_lens_l_h = new int[slice_size * iterations]; // not needed on device, will re use right walk memory
 
 
-    gpu_mem_req = sizeof(int32_t) * slice_size * 4 + sizeof(int32_t) * total_l_reads
+    gpu_mem_req = sizeof(int32_t) * slice_size * 4 + sizeof(int32_t) * 3
                            + sizeof(int32_t) * max_l_count * slice_size
                            + sizeof(int32_t) * max_r_count * slice_size
                            + sizeof(char) * max_ctg_size * slice_size
                            + sizeof(char) * max_l_count * max_read_size * slice_size * 2
                            + sizeof(char) * max_r_count * max_read_size * slice_size * 2
                            + sizeof(double) * slice_size 
-                           + sizeof(int64_t) * 3
                            + sizeof(loc_ht) * (max_read_size*max_read_count)*slice_size
                            + sizeof(char) * slice_size * max_walk_len
                            + (max_mer_len + max_walk_len) * sizeof(char) * slice_size
@@ -141,6 +144,9 @@ int main (int argc, char* argv[]){
 //rinse repeats till all slices are done.
     timer loop_time;
     loop_time.timer_start();
+    double data_mv_tim = 0;
+    double kernel_tim = 0;
+    double packing_tim = 0;
     slice_size = tot_extensions/iterations;
     for(int slice = 0; slice < iterations; slice++){
         print_vals("Done(%):", ((double)slice/iterations)*100);
@@ -161,7 +167,8 @@ int main (int argc, char* argv[]){
         uint32_t reads_r_offset_sum = 0;
         uint32_t reads_l_offset_sum = 0;
         int read_l_index = 0, read_r_index = 0;
-
+        timer tim_temp;
+        tim_temp.timer_start();
         for(int i = 0; i < slice_data.size(); i++){
             CtgWithReads temp_data = slice_data[i];
             cid_h[i] = temp_data.cid;
@@ -196,6 +203,9 @@ int main (int argc, char* argv[]){
             }
             rds_r_cnt_offset_h[i] = read_r_index; // running sum of right reads count
         }// data packing for loop ends
+        tim_temp.timer_end();
+
+        packing_tim += tim_temp.get_total_time();
 
         int total_r_reads_slice = read_r_index;
         int total_l_reads_slice = read_l_index;
@@ -204,7 +214,7 @@ int main (int argc, char* argv[]){
             term_counts_h[i] = 0;
         }
 
-
+        tim_temp.timer_start();
         print_vals("Host to Device Transfer...");
         //TODO: get rid of offsets by keeping uniform space between contigs, reads, this will reduce data movements but increase memory required on GPU.
         CUDA_CHECK(cudaMemcpy(cid_d, cid_h, sizeof(int32_t) * vec_size, cudaMemcpyHostToDevice));
@@ -220,7 +230,8 @@ int main (int argc, char* argv[]){
         CUDA_CHECK(cudaMemcpy(quals_right_d, quals_right_h, sizeof(char) * reads_r_offset_sum, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(quals_left_d, quals_left_h, sizeof(char) * reads_l_offset_sum, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(term_counts_d, term_counts_h, sizeof(int32_t)*3, cudaMemcpyHostToDevice));
-
+        tim_temp.timer_end();
+        data_mv_tim += tim_temp.get_total_time();
             //call kernel here, one thread per contig
         unsigned total_threads = vec_size;
         unsigned thread_per_blk = 512;
@@ -235,7 +246,7 @@ int main (int argc, char* argv[]){
         //TODO: pass only the read that needs to be extended, change the related code inside the kernel as well.
         iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
         depth_d, d_ht, d_ht_bool, max_mer_len, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, qual_offset, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
-      //  CUDA_CHECK(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         //perform revcomp of contig sequences and launch kernel with left reads, TODO: move right and left reads data separately
         print_vals("revcomp-ing the contigs for next kernel");
@@ -268,6 +279,7 @@ int main (int argc, char* argv[]){
             #endif   
 
         }
+        tim_temp.timer_start();
         CUDA_CHECK(cudaMemcpy(longest_walks_r_h + slice * max_walk_len * slice_size, longest_walks_d, sizeof(char) * vec_size * max_walk_len, cudaMemcpyDeviceToHost));
         CUDA_CHECK(cudaMemcpy(final_walk_lens_r_h + slice * slice_size, final_walk_lens_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); 
 
@@ -276,6 +288,8 @@ int main (int argc, char* argv[]){
         //cpying rev comped ctgs to device on same memory as previous ctgs
        // gpu_transfer.timer_start();
         CUDA_CHECK(cudaMemcpy(ctg_seqs_d, ctgs_seqs_rc_h, sizeof(char) * max_ctg_size * vec_size, cudaMemcpyHostToDevice));
+        tim_temp.timer_end();
+        data_mv_tim += tim_temp.get_total_time();
        // gpu_transfer.timer_end();
        // transfer_time += gpu_transfer.get_total_time();
         // launching kernel by swapping right and left reads, TODO: make this correct
@@ -287,14 +301,16 @@ int main (int argc, char* argv[]){
        // double left_kernel_time = kernel_time.get_total_time();
         print_vals("Device to Host Transfer...", "Copying back left walks");
         
-     //   gpu_transfer.timer_start();
+        tim_temp.timer_start();
         CUDA_CHECK(cudaMemcpy(longest_walks_l_h + slice * max_walk_len * slice_size , longest_walks_d, sizeof(char) * vec_size * max_walk_len, cudaMemcpyDeviceToHost)); // copy back left walks
         CUDA_CHECK(cudaMemcpy(final_walk_lens_l_h + slice * slice_size , final_walk_lens_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); 
-     //   gpu_transfer.timer_end();
-
+        tim_temp.timer_end();
+        data_mv_tim += tim_temp.get_total_time();
     }// the big for loop over all slices ends here
 loop_time.timer_end();
 print_vals("Total Loop Time:", loop_time.get_total_time());
+print_vals("Total Data Move Time:", data_mv_tim);
+print_vals("Total Packing Time:", packing_tim);
 
 //once all the alignments are on cpu, then go through them and stitch them with contigs in front and back.
 
@@ -302,7 +318,7 @@ print_vals("Total Loop Time:", loop_time.get_total_time());
   for(int j = 0; j < iterations; j++){
     int loc_size = (j == iterations - 1) ? slice_size + loc_left_over : slice_size;
 
-    //TODO: a lot of multiplications in below loop can be optimized (within in indices)
+    //TODO: a lot of multiplications in below loop can be optimized (within indices)
     for(int i = 0; i< loc_size; i++){
         if(final_walk_lens_l_h[j*slice_size + i] != 0){
             std::string left(&longest_walks_l_h[j*slice_size*max_walk_len + max_walk_len*i],final_walk_lens_l_h[j*slice_size + i]);
