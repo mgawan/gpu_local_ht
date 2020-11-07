@@ -53,6 +53,7 @@ struct CtgWithReads {
   int32_t cid;
   std::string seq;
   double depth;
+  int max_reads;
   std::vector<ReadSeq> reads_left;
   std::vector<ReadSeq> reads_right;
 };

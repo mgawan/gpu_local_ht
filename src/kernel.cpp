@@ -318,8 +318,6 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_of
         int num_mers = read.length - mer_len;
         cstr_type mer(read.start_ptr, mer_len);
         for( int start = 0; start < num_mers; start++){
-            // if(DEBUG_PRINT_GPU)
-            //     print_mer(mer);
             //TODO: on cpu side add a check that if a certain read contains 'N', that is not included, check this with steve, 
             // because searching a single mer for an N is going to be too slow
             loc_ht &temp_Mer = ht_get(thrd_loc_ht, mer, max_ht_size);

@@ -42,6 +42,7 @@ int32_t& max_ctg_size, int32_t& total_r_reads, int32_t& total_l_reads, int32_t& 
         max_r_count = rsize;
       if(max_l_count < lsize)
         max_l_count = lsize;
+      temp_in.max_reads = max(lsize, rsize);
       if (temp_in.seq.size() > max_ctg_size)
           max_ctg_size = temp_in.seq.size();
       for (int i = 0; i < lsize; i++) {
