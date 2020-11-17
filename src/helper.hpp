@@ -63,7 +63,7 @@ struct CtgWithReads {
 
 std::vector<std::string> read_fasta(std::string in_file, int &largest);
 void read_locassm_data(std::vector<CtgWithReads> *data_in, std::string fname, 
-int32_t& max_ctg_size, int32_t& total_r_reads, int32_t& total_l_reads, int32_t& max_read_size,int32_t& max_r_count, int32_t& max_l_count);
+uint32_t& max_ctg_size, uint32_t& total_r_reads, uint32_t& total_l_reads, uint32_t& max_read_size, uint32_t& max_r_count, uint32_t& max_l_count);
 //templated functions needs to be in the same translation unit
 template<typename T>
 void print_log(T _log){

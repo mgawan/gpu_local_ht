@@ -260,8 +260,8 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
 }
 
 __device__ 
-void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, int32_t* reads_r_offset, int32_t& r_rds_cnt, 
-int32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_offset, int64_t& excess_reads, const int idx){
+void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, uint32_t* reads_r_offset, uint32_t& r_rds_cnt, 
+uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_offset, int64_t& excess_reads, const int idx){
     cstr_type read;
     cstr_type qual;
     uint32_t running_sum_len = 0;
@@ -359,16 +359,16 @@ int32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_of
 }
 
 //same kernel will be used for right and left walks
-__global__ void iterative_walks_kernel(int32_t* cid, int32_t* ctg_offsets, char* contigs, 
-char* reads_l, char* reads_r, char* quals_r, char* quals_l, int32_t* reads_l_offset, int32_t* reads_r_offset, int32_t* rds_count_l_sum, int32_t* rds_count_r_sum, 
-double* ctg_depth, loc_ht* global_ht, loc_ht_bool* global_ht_bool, int kmer_len, int max_mer_len_off, int32_t *term_counts, int64_t num_walks, int64_t max_walk_len, 
-int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_offset, char* longest_walks, char* mer_walk_temp, int* final_walk_lens, int tot_ctgs)
+__global__ void iterative_walks_kernel(uint32_t* cid, uint32_t* ctg_offsets, char* contigs, 
+char* reads_l, char* reads_r, char* quals_r, char* quals_l, uint32_t* reads_l_offset, uint32_t* reads_r_offset, uint32_t* rds_count_l_sum, uint32_t* rds_count_r_sum, 
+double* ctg_depth, loc_ht* global_ht, loc_ht_bool* global_ht_bool, int kmer_len, uint32_t max_mer_len_off, uint32_t *term_counts, int64_t num_walks, int64_t max_walk_len, 
+int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_offset, char* longest_walks, char* mer_walk_temp, uint32_t* final_walk_lens, int tot_ctgs)
 {
     const int idx = threadIdx.x + blockIdx.x * blockDim.x;
     if(idx < tot_ctgs){
     cstr_type loc_ctg;
     char *loc_r_reads, *loc_l_reads, *loc_r_quals, *loc_l_quals;
-    int32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
+    uint32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
     loc_ht* loc_mer_map = global_ht + idx * max_read_size * max_read_count;
     loc_ht_bool* loc_bool_map = global_ht_bool + idx * max_walk_len;
     double loc_ctg_depth = ctg_depth[idx];
