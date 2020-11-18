@@ -361,7 +361,7 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
 //same kernel will be used for right and left walks
 __global__ void iterative_walks_kernel(uint32_t* cid, uint32_t* ctg_offsets, char* contigs, 
 char* reads_l, char* reads_r, char* quals_r, char* quals_l, uint32_t* reads_l_offset, uint32_t* reads_r_offset, uint32_t* rds_count_l_sum, uint32_t* rds_count_r_sum, 
-double* ctg_depth, loc_ht* global_ht, loc_ht_bool* global_ht_bool, int kmer_len, uint32_t max_mer_len_off, uint32_t *term_counts, int64_t num_walks, int64_t max_walk_len, 
+double* ctg_depth, loc_ht* global_ht,  uint32_t* prefix_ht, loc_ht_bool* global_ht_bool, int kmer_len, uint32_t max_mer_len_off, uint32_t *term_counts, int64_t num_walks, int64_t max_walk_len, 
 int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_offset, char* longest_walks, char* mer_walk_temp, uint32_t* final_walk_lens, int tot_ctgs)
 {
     const int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -369,11 +369,12 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
     cstr_type loc_ctg;
     char *loc_r_reads, *loc_l_reads, *loc_r_quals, *loc_l_quals;
     uint32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
-    loc_ht* loc_mer_map = global_ht + idx * max_read_size * max_read_count;
+    loc_ht* loc_mer_map;// = global_ht + idx * max_read_size * max_read_count;
+    uint32_t ht_loc_size;
     loc_ht_bool* loc_bool_map = global_ht_bool + idx * max_walk_len;
     double loc_ctg_depth = ctg_depth[idx];
     int64_t excess_reads;
-    uint32_t max_ht_size = max_read_size * max_read_count;
+    uint32_t max_ht_size = 0;//max_read_size * max_read_count;
     char* longest_walk_loc = longest_walks + idx * max_walk_len;
     int test = 629;
 
@@ -392,6 +393,8 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
         loc_l_reads = reads_l;
         loc_r_quals = quals_r;
         loc_l_quals = quals_l;
+        loc_mer_map = global_ht;
+        ht_loc_size = prefix_ht[idx];
     }else{
         loc_ctg.start_ptr = contigs + ctg_offsets[idx-1];
         loc_ctg.length = ctg_offsets[idx] - ctg_offsets[idx - 1];
@@ -416,7 +419,11 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
             loc_l_quals = quals_l;
         else
             loc_l_quals = quals_l + reads_l_offset[rds_count_l_sum[idx - 1] - 1]; // you want to start from where previous contigs, last read ends. 
+        
+        loc_mer_map = global_ht + prefix_ht[idx - 1];
+        ht_loc_size = prefix_ht[idx] - prefix_ht[idx - 1];
     }
+    max_ht_size = ht_loc_size;
     max_mer_len = min(max_mer_len, loc_ctg.length);
     char* loc_mer_walk_temp = mer_walk_temp + idx * (max_walk_len + max_mer_len_off);
 
