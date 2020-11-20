@@ -16,51 +16,6 @@ __device__ void cstr_copy(cstr_type& str1, cstr_type& str2){
     }
     str1.length = str2.length;
 }
-// __global__ void ht_kernel(loc_ht* ht, char* contigs, int* offset_sum, int kmer_size){
-//     int idx = blockIdx.x*gridDim.x + threadIdx.x;
-//     cstr_type loc_contig;
-//     loc_ht* thread_ht;
-//     thread_ht = ht + idx*HT_SIZE;
-
-//     for(int i = 0; i < HT_SIZE; i++){
-//         thread_ht[i].key.length = EMPTY;
-//     }
-
-//     if(idx == 0){
-//         loc_contig.start_ptr = contigs;
-//         loc_contig.length = offset_sum[idx];
-//     }else{
-//         loc_contig.start_ptr = contigs + offset_sum[idx];
-//         loc_contig.length = offset_sum[idx] - offset_sum[idx-1];
-//     }
-    
-//       cstr_type kmer;
-//       kmer.start_ptr = loc_contig.start_ptr;
-//       kmer.length = kmer_size;
-//       printf("kmer size:%d\n",kmer.length);
-//       printf("contig size:%d\n",loc_contig.length);
-//     for(int i = 0; i < (loc_contig.length - (kmer_size-1)); i++){
-//         char *mystr = kmer.start_ptr;
-//         for(int j = 0; j < kmer.length; j++){
-//             printf("%c",mystr[j]);
-//         }
-//         printf("\n");
-//         cstr_type temp = ht_get(thread_ht, kmer);
-//         if(temp.length == -1)
-//             ht_insert(thread_ht, kmer, loc_contig);
-//         else{
-//             printf("key exists:\n");
-//             for(int j = 0; j < temp.length; j++){
-//                 printf("%c",temp.start_ptr[j]);
-//         }
-//         printf("\n");
-//         }
-
-//         kmer.start_ptr =  kmer.start_ptr + 1;
-//     }
-
-
-// }
 
 //TODO: make sure that the returned hash value is wthin the range of HT size
 //TODO: find a better hash func for strings
@@ -81,7 +36,6 @@ __device__ unsigned hash_func(cstr_type key, uint32_t max_size){
 
 __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, MerFreqs mer_val, uint32_t max_size){
     unsigned hash_val = hash_func(kmer_key, max_size);
-    unsigned orig_hash = hash_val;
     //int count = 0; // for debugging
     while(true){
         int if_empty = thread_ht[hash_val].key.length; // length is set to some unimaginable number to indicate if its empty
@@ -100,13 +54,10 @@ __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, MerFreqs mer_va
 //overload for bool vals
 __device__ void ht_insert(loc_ht_bool* thread_ht, cstr_type kmer_key, bool bool_val, uint32_t max_size){
     unsigned hash_val = hash_func(kmer_key, max_size);
-    unsigned orig_hash = hash_val;
     //int count = 0; // for debugging
     while(true){
         int if_empty = thread_ht[hash_val].key.length; // length is set to some unimaginable number to indicate if its empty
         if(if_empty == EMPTY){ //the case where there is a key but no val, will not happen
-
-           // printf("hash_val:%d, orig_hash:%d, attemp:%d\n",hash_val, orig_hash, count); // for debugging
             thread_ht[hash_val].key = kmer_key;
             thread_ht[hash_val].val = bool_val;
             return;
@@ -117,19 +68,6 @@ __device__ void ht_insert(loc_ht_bool* thread_ht, cstr_type kmer_key, bool bool_
     }
 }
 
-// __device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key){
-//     int hash_val = hash_func(kmer_key);
-//     while(true){
-//         if(thread_ht[hash_val].key == kmer_key){
-//             thread_ht[hash_val].key.length = EMPTY;
-//             return;
-//         }
-//         if(thread_ht[hash_val].key.length == EMPTY){
-//             return;
-//         }
-//         hash_val = (hash_val + 1) & (HT_SIZE -1);
-//     }
-// }
 
 __device__ 
 loc_ht& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
@@ -185,11 +123,9 @@ loc_ht_bool& ht_get(loc_ht_bool* thread_ht, cstr_type kmer_key, uint32_t max_siz
 //TODO: check if we need longest walk in this function
 __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32_t max_ht_size, int& mer_len, cstr_type& mer_walk_temp, cstr_type& longest_walk, cstr_type& walk, const int idx, int max_walk_len){
     char walk_result = 'X';
+    #ifdef DEBUG_PRINT_GPU
     int test = 629;
-    int walk_length = 0;
-    //cstr_type mer(mer_walk_temp, mer_len);
-    //cstr_type walk(mer_walk_temp + mer_len, walk_length); // walk pointer starts at the end of initial mer pointer
-
+    #endif
     for( int nsteps = 0; nsteps < max_walk_len; nsteps++){
         //check if there is a cycle in graph
         loc_ht_bool &temp_mer_loop = ht_get(thrd_ht_bool, mer_walk_temp, max_walk_len);
@@ -265,8 +201,8 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
     cstr_type read;
     cstr_type qual;
     uint32_t running_sum_len = 0;
-    int test = 629;
     #ifdef DEBUG_PRINT_GPU
+    int test = 629;
     if(DEBUG_PRINT_GPU && idx == test)
         printf("inside_count_mers\n");
     #endif
@@ -376,12 +312,12 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
     int64_t excess_reads;
     uint32_t max_ht_size = 0;//max_read_size * max_read_count;
     char* longest_walk_loc = longest_walks + idx * max_walk_len;
+    #ifdef DEBUG_PRINT_GPU
     int test = 629;
+    #endif
 
-
-
-      int min_mer_len = LASSM_MIN_KMER_LEN;
-      int max_mer_len = LASSM_MAX_KMER_LEN;
+    int min_mer_len = LASSM_MIN_KMER_LEN;
+    int max_mer_len = LASSM_MAX_KMER_LEN;
       
 
     if(idx == 0){
@@ -426,13 +362,6 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
     max_ht_size = ht_loc_size;
     max_mer_len = min(max_mer_len, loc_ctg.length);
     char* loc_mer_walk_temp = mer_walk_temp + idx * (max_walk_len + max_mer_len_off);
-
-   // uint32_t mer_len = 21;
-    // cstr_type ctg_mer(loc_ctg.start_ptr + (loc_ctg.length - mer_len), mer_len);
-    // cstr_type loc_mer_walk(loc_mer_walk_temp, 0);
-    // cstr_copy(loc_mer_walk, ctg_mer);
-    // cstr_type longest_walk_thread(longest_walk_loc,0);
-    // cstr_type walk(loc_mer_walk.start_ptr + mer_len, 0);
 
     cstr_type longest_walk_thread(longest_walk_loc,0);
 

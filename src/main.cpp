@@ -21,8 +21,15 @@ size_t get_device_mem(){
     return free_mem;
 }
 
+struct accum_data{
+    std::vector<uint32_t> ht_sizes;
+    std::vector<uint32_t> l_reads_count;
+    std::vector<uint32_t> r_reads_count;
+    std::vector<uint32_t> ctg_sizes;
+};
+
 std::ofstream ofile("/global/cscratch1/sd/mgawan/local_assem_large/haswell_large/merged/test-results/results-test.dat");
-void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t total_r_reads, uint32_t total_l_reads, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len,int max_reads_count, std::vector<uint32_t>& ht_size_vec);
+void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len,int max_reads_count, accum_data& sizes_outliers);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
 // sample cmd line: ./build/ht_loc ../locassm_data/localassm_extend_7-21.dat ./out_file <kmer_size>
@@ -41,7 +48,8 @@ int main (int argc, char* argv[]){
     uint32_t mid_l_max = 0, mid_r_max = 0, midsup_l_max = 0, midsup_r_max = 0, outlier_l_max = 0, outlier_r_max = 0, mid_max_contig_sz = 0, midsup_max_contig_sz = 0;
     uint32_t outliers_max_contig_sz = 0, mids_tot_r_reads = 0, mids_tot_l_reads = 0, midsup_tot_r_reads = 0, midsup_tot_l_reads = 0, outliers_tot_r_reads = 0;
     uint32_t outliers_tot_l_reads = 0;
-    std::vector<uint32_t> ht_size_mid, ht_size_midsup, ht_size_outliers;
+   // std::vector<uint32_t> ht_size_mid, ht_size_midsup, ht_size_outliers;
+    accum_data sizes_mid, sizes_midsup, sizes_outliers;
 
     for(int i = 0; i < data_in.size(); i++){
         CtgWithReads temp_in = data_in[i];
@@ -50,7 +58,10 @@ int main (int argc, char* argv[]){
         }else if(temp_in.max_reads > 0 && temp_in.max_reads < 10){
             mid_slice.push_back(temp_in);
             uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
-            ht_size_mid.push_back(temp_ht_size);
+            sizes_mid.ht_sizes.push_back(temp_ht_size);
+            sizes_mid.ctg_sizes.push_back(temp_in.seq.size());
+            sizes_mid.l_reads_count.push_back(temp_in.reads_left.size());
+            sizes_mid.r_reads_count.push_back(temp_in.reads_right.size());
             mids_tot_r_reads += temp_in.reads_right.size();
             mids_tot_l_reads += temp_in.reads_left.size();
             if(mid_l_max < temp_in.reads_left.size())
@@ -59,22 +70,27 @@ int main (int argc, char* argv[]){
                 mid_r_max = temp_in.reads_right.size();
             if(mid_max_contig_sz < temp_in.seq.size())
                 mid_max_contig_sz = temp_in.seq.size();
-        }else if(temp_in.max_reads > 10 && temp_in.max_reads < 100){
-            midsup_slice.push_back(temp_in);
-            uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
-            ht_size_midsup.push_back(temp_ht_size);
-            midsup_tot_r_reads += temp_in.reads_right.size();
-            midsup_tot_l_reads += temp_in.reads_left.size();
-            if(midsup_l_max < temp_in.reads_left.size())
-                midsup_l_max = temp_in.reads_left.size();
-            if(midsup_r_max < temp_in.reads_right.size())
-                midsup_r_max = temp_in.reads_right.size();
-            if(midsup_max_contig_sz < temp_in.seq.size())
-                midsup_max_contig_sz = temp_in.seq.size();
-        }else{
+        }
+        // else if(temp_in.max_reads > 10 && temp_in.max_reads < 100){
+        //     midsup_slice.push_back(temp_in);
+        //     uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
+        //     ht_size_midsup.push_back(temp_ht_size);
+        //     midsup_tot_r_reads += temp_in.reads_right.size();
+        //     midsup_tot_l_reads += temp_in.reads_left.size();
+        //     if(midsup_l_max < temp_in.reads_left.size())
+        //         midsup_l_max = temp_in.reads_left.size();
+        //     if(midsup_r_max < temp_in.reads_right.size())
+        //         midsup_r_max = temp_in.reads_right.size();
+        //     if(midsup_max_contig_sz < temp_in.seq.size())
+        //         midsup_max_contig_sz = temp_in.seq.size();
+        // }
+        else{
             outlier_slice.push_back(temp_in);
             uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
-            ht_size_outliers.push_back(temp_ht_size);
+            sizes_outliers.ht_sizes.push_back(temp_ht_size);
+            sizes_outliers.ctg_sizes.push_back(temp_in.seq.size());
+            sizes_outliers.l_reads_count.push_back(temp_in.reads_left.size());
+            sizes_outliers.r_reads_count.push_back(temp_in.reads_right.size());
             outliers_tot_r_reads += temp_in.reads_right.size();
             outliers_tot_l_reads += temp_in.reads_left.size();
             if(outlier_l_max < temp_in.reads_left.size())
@@ -100,15 +116,15 @@ int main (int argc, char* argv[]){
      print_vals("mids calling",  "mids count:", mid_slice.size());
     
     int max_reads_count = 10;
-    call_kernel(mid_slice, mid_max_contig_sz, mids_tot_r_reads, mids_tot_l_reads, max_read_size, mid_r_max, mid_l_max, max_mer_len,max_reads_count, ht_size_mid);
-    print_vals("midsup calling",  "mids count:", midsup_slice.size());
-    max_reads_count = 100;
-    call_kernel(midsup_slice, midsup_max_contig_sz, midsup_tot_r_reads, midsup_tot_l_reads, max_read_size, midsup_r_max, midsup_l_max, max_mer_len,max_reads_count, ht_size_midsup);
+    call_kernel(mid_slice, mid_max_contig_sz, max_read_size, mid_r_max, mid_l_max, max_mer_len,max_reads_count, sizes_mid);
+    // print_vals("midsup calling",  "mids count:", midsup_slice.size());
+    // max_reads_count = 100;
+    // call_kernel(midsup_slice, midsup_max_contig_sz, midsup_tot_r_reads, midsup_tot_l_reads, max_read_size, midsup_r_max, midsup_l_max, max_mer_len,max_reads_count, ht_size_midsup);
 
     print_vals("outliers calling", "outliers count:", outlier_slice.size());
      max_reads_count = 239;
   //  overall_time.timer_start();
-    call_kernel(outlier_slice, outliers_max_contig_sz, outliers_tot_r_reads, outliers_tot_l_reads, max_read_size, outlier_r_max, outlier_l_max, max_mer_len, max_reads_count, ht_size_outliers);
+    call_kernel(outlier_slice, outliers_max_contig_sz, max_read_size, outlier_r_max, outlier_l_max, max_mer_len, max_reads_count, sizes_outliers);
     //overall_time.timer_end();
     overall_time.timer_end();
     
@@ -121,7 +137,7 @@ int main (int argc, char* argv[]){
 }
 
 
-void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t total_r_reads, uint32_t total_l_reads, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len, int max_reads_count, std::vector<uint32_t>& ht_size_vec)
+void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len, int max_reads_count, accum_data& sizes_vecs)
 {
 
     //std::string in_file = argv[1];
@@ -139,18 +155,21 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
     int insert_avg = 121;
     int insert_stddev = 246;
     int max_walk_len = insert_avg + 2 * insert_stddev;
-    uint32_t ht_tot_size = std::accumulate(ht_size_vec.begin(), ht_size_vec.end(), 0);
+    uint32_t ht_tot_size = std::accumulate(sizes_vecs.ht_sizes.begin(), sizes_vecs.ht_sizes.end(), 0);
+    uint32_t total_r_reads = std::accumulate(sizes_vecs.r_reads_count.begin(), sizes_vecs.r_reads_count.end(), 0);
+    uint32_t total_l_reads = std::accumulate(sizes_vecs.l_reads_count.begin(), sizes_vecs.l_reads_count.end(), 0);
+    uint32_t total_ctg_len = std::accumulate(sizes_vecs.ctg_sizes.begin(), sizes_vecs.ctg_sizes.end(), 0);
     print_vals("new HT size:", ht_tot_size*sizeof(loc_ht));
-    size_t gpu_mem_req = sizeof(int32_t) * tot_extensions * 4 + sizeof(int32_t) * total_l_reads
-                           + sizeof(int32_t) * total_r_reads + sizeof(char) * max_ctg_size * tot_extensions
-                           + sizeof(char) * total_l_reads * max_read_size + sizeof(char) * total_r_reads * max_read_size
+    size_t gpu_mem_req = sizeof(int32_t) * tot_extensions * 6 + sizeof(int32_t) * total_l_reads
+                           + sizeof(int32_t) * total_r_reads + sizeof(char) * total_ctg_len
+                           + sizeof(char) * total_l_reads * max_read_size*2 + sizeof(char) * total_r_reads * max_read_size*2 // for quals included
                            + sizeof(double) * tot_extensions + sizeof(char) * total_r_reads * max_read_size 
                            + sizeof(char) * total_l_reads * max_read_size + sizeof(int64_t)*3
                            + sizeof(loc_ht)*ht_tot_size // changed to try the new method
                            + sizeof(char)*tot_extensions * max_walk_len
                            + (max_mer_len + max_walk_len) * sizeof(char) * tot_extensions
-                           + sizeof(loc_ht_bool) * tot_extensions * max_walk_len
-                           + sizeof(int) * tot_extensions;
+                           + sizeof(loc_ht_bool) * tot_extensions * max_walk_len;
+
 
     print_vals("Total GPU mem required (GBs):", (double)gpu_mem_req/(1024*1024*1024));                     
     size_t gpu_mem_avail = get_device_mem();
@@ -162,16 +181,30 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
     unsigned remaining = tot_extensions % iterations;
     std::vector<uint32_t> max_ht_sizes;
 //to get the largest ht size for any iteration and allocate GPU memory for that (once)
-    uint32_t max_ht = 0, test_sum = 0;
+    uint32_t max_ht = 0, max_r_rds_its = 0, max_l_rds_its = 0, max_ctg_len_it = 0, test_sum = 0;
     for(int i = 0; i < iterations; i++){
-        uint32_t temp_max = 0;
-        if(i < iterations -1 )
-            temp_max = std::accumulate(ht_size_vec.begin() + i*slice_size, ht_size_vec.begin()+(i+1)*slice_size, 0 );
-        else
-            temp_max = std::accumulate(ht_size_vec.begin() + i*slice_size, ht_size_vec.begin()+((i+1)*slice_size) + remaining, 0 );
-        if(temp_max > max_ht)
-            max_ht = temp_max;
-        test_sum += temp_max;
+        uint32_t temp_max_ht = 0, temp_max_r_rds = 0, temp_max_l_rds = 0, temp_max_ctg_len = 0;
+        if(i < iterations -1 ){
+            temp_max_ht = std::accumulate(sizes_vecs.ht_sizes.begin() + i*slice_size, sizes_vecs.ht_sizes.begin()+(i+1)*slice_size, 0 );
+            temp_max_r_rds = std::accumulate(sizes_vecs.r_reads_count.begin() + i*slice_size, sizes_vecs.r_reads_count.begin()+(i+1)*slice_size, 0 );
+            temp_max_l_rds = std::accumulate(sizes_vecs.l_reads_count.begin() + i*slice_size, sizes_vecs.l_reads_count.begin()+(i+1)*slice_size, 0 );
+            temp_max_ctg_len = std::accumulate(sizes_vecs.ctg_sizes.begin() + i*slice_size, sizes_vecs.ctg_sizes.begin()+(i+1)*slice_size, 0 );
+        }
+        else{
+            temp_max_ht = std::accumulate(sizes_vecs.ht_sizes.begin() + i*slice_size, sizes_vecs.ht_sizes.begin()+((i+1)*slice_size) + remaining, 0 );
+            temp_max_r_rds = std::accumulate(sizes_vecs.r_reads_count.begin() + i*slice_size, sizes_vecs.r_reads_count.begin()+((i+1)*slice_size) + remaining, 0 );
+            temp_max_l_rds = std::accumulate(sizes_vecs.l_reads_count.begin() + i*slice_size, sizes_vecs.l_reads_count.begin()+((i+1)*slice_size) + remaining, 0 );
+            temp_max_ctg_len = std::accumulate(sizes_vecs.ctg_sizes.begin() + i*slice_size, sizes_vecs.ctg_sizes.begin()+((i+1)*slice_size) + remaining, 0 );
+        }
+        if(temp_max_ht > max_ht)
+            max_ht = temp_max_ht;
+        if(temp_max_r_rds > max_r_rds_its)
+            max_r_rds_its = temp_max_r_rds;
+        if(temp_max_l_rds > max_l_rds_its)
+            max_l_rds_its = temp_max_l_rds; 
+        if(temp_max_ctg_len > max_ctg_len_it)
+            max_ctg_len_it = temp_max_ctg_len;
+        test_sum += temp_max_ht;
     }
 
     print_vals("test_sum:", test_sum*sizeof(loc_ht));
@@ -215,22 +248,26 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
     uint32_t* prefix_ht_size_h = new uint32_t[slice_size];
     mem_timer.timer_end();
     cpu_mem_aloc_time += mem_timer.get_total_time();
-    gpu_mem_req = sizeof(int32_t) * slice_size * 4 + sizeof(int32_t) * 3
-                           + sizeof(int32_t) * max_l_count * slice_size
-                           + sizeof(int32_t) * max_r_count * slice_size
-                           + sizeof(char) * max_ctg_size * slice_size
-                           + sizeof(char) * max_l_count * max_read_size * slice_size * 2
-                           + sizeof(char) * max_r_count * max_read_size * slice_size * 2
+    gpu_mem_req = sizeof(int32_t) * slice_size * 6 + sizeof(int32_t) * 3
+                           + sizeof(int32_t) * max_l_rds_its
+                           + sizeof(int32_t) * max_r_rds_its
+                           + sizeof(char) * max_ctg_len_it
+                           + sizeof(char) * max_l_rds_its * max_read_size * 2
+                           + sizeof(char) * max_r_rds_its * max_read_size  * 2
                            + sizeof(double) * slice_size 
                            + sizeof(loc_ht) * max_ht
                            + sizeof(char) * slice_size * max_walk_len
                            + (max_mer_len + max_walk_len) * sizeof(char) * slice_size
-                           + sizeof(loc_ht_bool) * slice_size * max_walk_len
-                           + sizeof(int) * slice_size
-                           + sizeof(uint32_t) * slice_size;
+                           + sizeof(loc_ht_bool) * slice_size * max_walk_len;
 
     print_vals("Device Mem requesting per slice (MB):", (double)gpu_mem_req/ (1024*1024));
-
+    
+    print_vals("**old lochash size:",sizeof(loc_ht)*(max_read_size*max_read_count)*slice_size, "new local hash:",sizeof(loc_ht) * max_ht);
+    print_vals("**boolhash ize:",sizeof(loc_ht_bool) * slice_size * max_walk_len);
+    print_vals("**max_read_count:", max_read_count);
+    print_vals("max read l count:", max_l_count);
+    print_vals("max read r count:", max_r_count);
+    print_vals("size of loc_host:", sizeof(loc_ht));
 
     uint32_t *cid_d, *ctg_seq_offsets_d, *reads_l_offset_d, *reads_r_offset_d; 
     uint32_t *rds_l_cnt_offset_d, *rds_r_cnt_offset_d, *prefix_ht_size_d;
@@ -246,16 +283,16 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
     CUDA_CHECK(cudaMalloc(&prefix_ht_size_d, sizeof(uint32_t) * slice_size));
     CUDA_CHECK(cudaMalloc(&cid_d, sizeof(uint32_t) * slice_size));
     CUDA_CHECK(cudaMalloc(&ctg_seq_offsets_d, sizeof(uint32_t) * slice_size));
-    CUDA_CHECK(cudaMalloc(&reads_l_offset_d, sizeof(uint32_t) * max_l_count * slice_size));
-    CUDA_CHECK(cudaMalloc(&reads_r_offset_d, sizeof(uint32_t) * max_r_count * slice_size));
+    CUDA_CHECK(cudaMalloc(&reads_l_offset_d, sizeof(uint32_t) * max_l_rds_its));// changed this with new max
+    CUDA_CHECK(cudaMalloc(&reads_r_offset_d, sizeof(uint32_t) * max_r_rds_its)); // changed this with new max
     CUDA_CHECK(cudaMalloc(&rds_l_cnt_offset_d, sizeof(uint32_t) * slice_size));
     CUDA_CHECK(cudaMalloc(&rds_r_cnt_offset_d, sizeof(uint32_t) * slice_size));
-    CUDA_CHECK(cudaMalloc(&ctg_seqs_d, sizeof(char) * max_ctg_size * slice_size));
-    CUDA_CHECK(cudaMalloc(&reads_left_d, sizeof(char) * max_l_count * max_read_size * slice_size));
-    CUDA_CHECK(cudaMalloc(&reads_right_d, sizeof(char) * max_r_count * max_read_size * slice_size));
+    CUDA_CHECK(cudaMalloc(&ctg_seqs_d, sizeof(char) * max_ctg_len_it)); // changed this with new max
+    CUDA_CHECK(cudaMalloc(&reads_left_d, sizeof(char) * max_read_size * max_l_rds_its)); // changed
+    CUDA_CHECK(cudaMalloc(&reads_right_d, sizeof(char) * max_read_size * max_r_rds_its));//changed
     CUDA_CHECK(cudaMalloc(&depth_d, sizeof(double) * slice_size));
-    CUDA_CHECK(cudaMalloc(&quals_right_d, sizeof(char) * max_r_count * max_read_size * slice_size));
-    CUDA_CHECK(cudaMalloc(&quals_left_d, sizeof(char) * max_l_count * max_read_size * slice_size));
+    CUDA_CHECK(cudaMalloc(&quals_right_d, sizeof(char) *max_read_size * max_r_rds_its));//changed this
+    CUDA_CHECK(cudaMalloc(&quals_left_d, sizeof(char) * max_read_size * max_l_rds_its));//changed this with new
     CUDA_CHECK(cudaMalloc(&term_counts_d, sizeof(uint32_t)*3));
     // if we separate out kernels for right and left walks then we can use r_count/l_count separately but for now use the max of two
     // also subtract the appropriate kmer length from max_read_size to reduce memory footprint of global ht_loc.
@@ -269,12 +306,7 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
     CUDA_CHECK(cudaMalloc(&final_walk_lens_d, sizeof(uint32_t) * slice_size));
     mem_timer.timer_end();
     gpu_mem_aloc_time += mem_timer.get_total_time();
-    print_vals("**old lochash size:",sizeof(loc_ht)*(max_read_size*max_read_count)*slice_size, "new local hash:",sizeof(loc_ht) * max_ht);
-    print_vals("**boolhash ize:",sizeof(loc_ht_bool) * slice_size * max_walk_len);
-    print_vals("**max_read_count:", max_read_count);
-    print_vals("max read l count:", max_l_count);
-    print_vals("max read r count:", max_r_count);
-     print_vals("size of loc_host:", sizeof(loc_ht));
+
 
 
 //start a loop here which takes a slice of data_in
