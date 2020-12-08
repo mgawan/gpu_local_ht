@@ -124,7 +124,7 @@ loc_ht_bool& ht_get(loc_ht_bool* thread_ht, cstr_type kmer_key, uint32_t max_siz
 __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32_t max_ht_size, int& mer_len, cstr_type& mer_walk_temp, cstr_type& longest_walk, cstr_type& walk, const int idx, int max_walk_len){
     char walk_result = 'X';
     #ifdef DEBUG_PRINT_GPU
-    int test = 629;
+    int test = 0;
     #endif
     for( int nsteps = 0; nsteps < max_walk_len; nsteps++){
         //check if there is a cycle in graph
@@ -202,7 +202,7 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
     cstr_type qual;
     uint32_t running_sum_len = 0;
     #ifdef DEBUG_PRINT_GPU
-    int test = 629;
+    int test = 0;
     if(DEBUG_PRINT_GPU && idx == test)
         printf("inside_count_mers\n");
     #endif
@@ -313,7 +313,7 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
     uint32_t max_ht_size = 0;//max_read_size * max_read_count;
     char* longest_walk_loc = longest_walks + idx * max_walk_len;
     #ifdef DEBUG_PRINT_GPU
-    int test = 629;
+    int test = 0;
     #endif
 
     int min_mer_len = LASSM_MIN_KMER_LEN;

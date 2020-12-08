@@ -28,7 +28,7 @@ struct accum_data{
     std::vector<uint32_t> ctg_sizes;
 };
 
-std::ofstream ofile("/global/cscratch1/sd/mgawan/local_assem_large/haswell_large/merged/test-results/results-test.dat");
+std::ofstream ofile("./profiling/corr_out.dat");
 void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len,int max_reads_count, accum_data& sizes_outliers);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
