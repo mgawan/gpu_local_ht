@@ -3,10 +3,12 @@
 
 //TODO: all the hashtable entries need to be set to empty, figure that out
 __device__ void print_mer(cstr_type& mer){
+    if(threadIdx.x%32 == 0){
     for(int i = 0; i < mer.length; i++){
         printf("%c",mer.start_ptr[i]);
     }
     printf("\n");
+    }
 }
 
 __device__ void cstr_copy(cstr_type& str1, cstr_type& str2){
@@ -119,6 +121,36 @@ loc_ht_bool& ht_get(loc_ht_bool* thread_ht, cstr_type kmer_key, uint32_t max_siz
 
 }
 
+__device__ 
+loc_ht& ht_get_atomic(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
+    unsigned hash_val = hash_func(kmer_key, max_size);
+    unsigned orig_hash = hash_val;
+
+    while(true){
+        int prev = atomicCAS(&thread_ht[hash_val].key.length, EMPTY, kmer_key.length);
+        int mask = __match_any_sync(__activemask(), (unsigned long long)&thread_ht[hash_val]); // all the threads in the warp which have same address
+        
+        if(prev == EMPTY){
+            thread_ht[hash_val].key.start_ptr = kmer_key.start_ptr;
+            thread_ht[hash_val].val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0};
+        }
+        __syncwarp(mask);
+        if(prev != EMPTY && thread_ht[hash_val].key == kmer_key){
+            //printf("key found, returning\n");// keep this for debugging
+            return thread_ht[hash_val];
+        }else if (prev == EMPTY){
+            return thread_ht[hash_val];
+        }
+        hash_val = (hash_val +1 ) %max_size;//hash_val = (hash_val + 1) & (HT_SIZE -1);
+        if(hash_val == orig_hash){ // loop till you reach the same starting positions and then return error
+            printf("*****end reached, hashtable full*****\n"); // for debugging
+            printf("*****end reached, hashtable full*****\n");
+            printf("*****end reached, hashtable full*****\n");
+           // return loc_ht(cstr_type(NULL,-1), MerFreqs());
+        }
+    }
+
+}
 //TODO: intialize the bool table in kernel main
 //TODO: check if we need longest walk in this function
 __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32_t max_ht_size, int& mer_len, cstr_type& mer_walk_temp, cstr_type& longest_walk, cstr_type& walk, const int idx, int max_walk_len){
@@ -197,7 +229,8 @@ __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32
 
 __device__ 
 void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, uint32_t* reads_r_offset, uint32_t& r_rds_cnt, 
-uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_offset, int64_t& excess_reads, const int idx){
+uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_offset, int64_t& excess_reads, const long int idx){
+    const int lane_id = threadIdx.x%32;
     cstr_type read;
     cstr_type qual;
     uint32_t running_sum_len = 0;
@@ -209,7 +242,7 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
     for(int i = 0; i < r_rds_cnt; i++){
         #ifdef DEBUG_PRINT_GPU
         if(DEBUG_PRINT_GPU && idx == test)
-            printf("read loop iter:%d\n",i);
+            printf("read loop iter:%d, thread:%d, loop max:%d\n",i, threadIdx.x, r_rds_cnt);
         #endif
         //TODO: pass idx here
         read.start_ptr = loc_r_reads + running_sum_len;
@@ -220,65 +253,66 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
                 qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i];
                 #ifdef DEBUG_PRINT_GPU
                 if(DEBUG_PRINT_GPU && idx == test)
-                    printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, read_length:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length);
+                    printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, read_length:%d, thread_id:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length, threadIdx.x);
                 #endif
                 }
-            else{   
+            else{  
+                // printf("idx:%d, r_rdsx_cnt: %d, i: %d \n", idx, r_rds_cnt, i); 
+                // printf("i:%d, rds_count:%d, idx:%d, thread:%d, blk:%d\n", i, r_rds_cnt, idx, threadIdx.x, blockIdx.x); 
                 read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
                 qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
                 #ifdef DEBUG_PRINT_GPU
                 if(DEBUG_PRINT_GPU && idx == test)
-                    printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length);
+                    printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d, thread:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length, threadIdx.x);
                 #endif
-                
                 }
-            }
+        }
         else{
             read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + (i-1)];
             qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + (i-1)];
             #ifdef DEBUG_PRINT_GPU
             if(DEBUG_PRINT_GPU && idx == test)
-                 printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length);
+                 printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d, thread:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length, threadIdx.x);
             #endif
                 
             }
         #ifdef DEBUG_PRINT_GPU
         if(DEBUG_PRINT_GPU && idx == test){
             printf("mer_len:%d, read_len:%d\n",mer_len, read.length);
-            printf("read from idx:%d\n", idx);
+            printf("read from idx:%d, thread:%d\n", idx, threadIdx.x);
             print_mer(read);
           }
-          #endif
+        #endif
         if (mer_len > read.length) // skip the read which is smaller than merlen
             continue;
         int num_mers = read.length - mer_len;
-        cstr_type mer(read.start_ptr, mer_len);
-        for( int start = 0; start < num_mers; start++){
+        for( int start = lane_id; start < num_mers; start+=32){
             //TODO: on cpu side add a check that if a certain read contains 'N', that is not included, check this with steve, 
             // because searching a single mer for an N is going to be too slow
-            loc_ht &temp_Mer = ht_get(thrd_loc_ht, mer, max_ht_size);
-            if(temp_Mer.key.length == EMPTY){
-                temp_Mer.key = mer;
-                temp_Mer.val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0};
-            }
+            cstr_type mer(read.start_ptr + start, mer_len);
+            loc_ht &temp_Mer = ht_get_atomic(thrd_loc_ht, mer, max_ht_size);
+            // if(temp_Mer.key.length == EMPTY){
+            //     temp_Mer.key = mer;
+            //     temp_Mer.val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0};
+            // }
             int ext_pos = start + mer_len;
           //  assert(ext_pos < (int)read.length); // TODO: verify that assert works on gpu, for now commenting it out and replacing with printf
           if(ext_pos >= (int) read.length)
-            printf("*********ASSERTION FAILUER IN COUNT_MERS****");
+            printf("*********ASSERTION FAILURE IN COUNT_MERS****");
             char ext = read.start_ptr[ext_pos];
             if (ext == 'N') continue; // TODO: why the redundant check?
             int qual_diff = qual.start_ptr[ext_pos] - qual_offset;
             if (qual_diff >= LASSM_MIN_QUAL) temp_Mer.val.low_q_exts.inc(ext, 1);
             if (qual_diff >= LASSM_MIN_HI_QUAL) temp_Mer.val.hi_q_exts.inc(ext, 1);
             
-            mer.start_ptr = mer.start_ptr + 1;
+           // mer.start_ptr = mer.start_ptr + 1;
         }
        running_sum_len += read.length; // right before the for loop ends, update the prev_len to offset next read correctly
     }
 
     //setting extension by traversing the completed table
     // TODO: think of a better way to do this
-    for (int k = 0; k < max_ht_size; k++) {
+    for (int k = lane_id; k < max_ht_size; k+=32) {
         if( thrd_loc_ht[k].key.length != EMPTY){
             thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
             #ifdef DEBUG_PRINT_GPU
@@ -300,68 +334,96 @@ char* reads_l, char* reads_r, char* quals_r, char* quals_l, uint32_t* reads_l_of
 double* ctg_depth, loc_ht* global_ht,  uint32_t* prefix_ht, loc_ht_bool* global_ht_bool, int kmer_len, uint32_t max_mer_len_off, uint32_t *term_counts, int64_t num_walks, int64_t max_walk_len, 
 int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_offset, char* longest_walks, char* mer_walk_temp, uint32_t* final_walk_lens, int tot_ctgs)
 {
-    const int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if(idx < tot_ctgs){
+    const long int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    const long int warp_id_blk = threadIdx.x/32;
+    const long int warp_id_glb = idx/32;
+    const long int lane_id = threadIdx.x%32;
+    if(warp_id_glb < tot_ctgs){ // so that no out of bound accesses 
     cstr_type loc_ctg;
     char *loc_r_reads, *loc_l_reads, *loc_r_quals, *loc_l_quals;
     uint32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
     loc_ht* loc_mer_map;// = global_ht + idx * max_read_size * max_read_count;
     uint32_t ht_loc_size;
-    loc_ht_bool* loc_bool_map = global_ht_bool + idx * max_walk_len;
-    double loc_ctg_depth = ctg_depth[idx];
+    loc_ht_bool* loc_bool_map;// = global_ht_bool + idx * max_walk_len;
+    double loc_ctg_depth;// = ctg_depth[idx];
     int64_t excess_reads;
     uint32_t max_ht_size = 0;//max_read_size * max_read_count;
-    char* longest_walk_loc = longest_walks + idx * max_walk_len;
+    char* longest_walk_loc;// = longest_walks + idx * max_walk_len;
+    char* loc_mer_walk_temp;
     #ifdef DEBUG_PRINT_GPU
     int test = 0;
     #endif
 
     int min_mer_len = LASSM_MIN_KMER_LEN;
     int max_mer_len = LASSM_MAX_KMER_LEN;
-      
-
-    if(idx == 0){
+    
+    //the warp portion is for HT phase only so mapping only reads related data based on warp id
+    if(warp_id_glb == 0){
         loc_ctg.start_ptr = contigs;
-        loc_ctg.length = ctg_offsets[idx];
-        r_rds_cnt = rds_count_r_sum[idx];
-        l_rds_cnt = rds_count_l_sum[idx];
+        loc_ctg.length = ctg_offsets[warp_id_glb];
+        loc_bool_map = global_ht_bool + warp_id_glb * max_walk_len;
+        longest_walk_loc = longest_walks + warp_id_glb * max_walk_len;
+        loc_mer_walk_temp = mer_walk_temp + warp_id_glb * (max_walk_len + max_mer_len_off);
+        r_rds_cnt = rds_count_r_sum[warp_id_glb];
+        l_rds_cnt = rds_count_l_sum[warp_id_glb];
         loc_r_reads = reads_r;
         loc_l_reads = reads_l;
         loc_r_quals = quals_r;
         loc_l_quals = quals_l;
         loc_mer_map = global_ht;
-        ht_loc_size = prefix_ht[idx];
+        ht_loc_size = prefix_ht[warp_id_glb];
+        loc_ctg_depth = ctg_depth[warp_id_glb];
     }else{
-        loc_ctg.start_ptr = contigs + ctg_offsets[idx-1];
-        loc_ctg.length = ctg_offsets[idx] - ctg_offsets[idx - 1];
-        r_rds_cnt = rds_count_r_sum[idx] - rds_count_r_sum[idx - 1];
-        l_rds_cnt = rds_count_l_sum[idx] - rds_count_l_sum[idx - 1];
-        if (rds_count_r_sum[idx - 1] == 0)
+        loc_ctg.start_ptr = contigs + ctg_offsets[warp_id_glb-1];
+        loc_ctg.length = ctg_offsets[warp_id_glb] - ctg_offsets[warp_id_glb - 1];
+        loc_bool_map = global_ht_bool + warp_id_glb * max_walk_len;
+        longest_walk_loc = longest_walks + warp_id_glb * max_walk_len;
+        loc_mer_walk_temp = mer_walk_temp + warp_id_glb * (max_walk_len + max_mer_len_off);
+        loc_ctg_depth = ctg_depth[warp_id_glb];
+        r_rds_cnt = rds_count_r_sum[warp_id_glb] - rds_count_r_sum[warp_id_glb - 1];
+        l_rds_cnt = rds_count_l_sum[warp_id_glb] - rds_count_l_sum[warp_id_glb - 1];
+        if (rds_count_r_sum[warp_id_glb - 1] == 0)
             loc_r_reads = reads_r;
         else
-            loc_r_reads = reads_r + reads_r_offset[rds_count_r_sum[idx - 1] - 1]; // you want to start from where previous contigs, last read ends.
+            loc_r_reads = reads_r + reads_r_offset[rds_count_r_sum[warp_id_glb - 1] - 1]; // you want to start from where previous contigs, last read ends.
 
-        if (rds_count_l_sum[idx - 1] == 0)
+        if (rds_count_l_sum[warp_id_glb - 1] == 0)
             loc_l_reads = reads_l;
         else
-            loc_l_reads = reads_l + reads_l_offset[rds_count_l_sum[idx - 1] - 1]; // you want to start from where previous contigs, last read ends.
+            loc_l_reads = reads_l + reads_l_offset[rds_count_l_sum[warp_id_glb - 1] - 1]; // you want to start from where previous contigs, last read ends.
         
-        if (rds_count_r_sum[idx - 1] == 0)
+        if (rds_count_r_sum[warp_id_glb - 1] == 0)
             loc_r_quals = quals_r;
         else
-            loc_r_quals = quals_r + reads_r_offset[rds_count_r_sum[idx - 1] - 1]; // you want to start from where previous contigs, last read ends.
+            loc_r_quals = quals_r + reads_r_offset[rds_count_r_sum[warp_id_glb - 1] - 1]; // you want to start from where previous contigs, last read ends.
 
-        if (rds_count_l_sum[idx - 1] == 0)
+        if (rds_count_l_sum[warp_id_glb - 1] == 0)
             loc_l_quals = quals_l;
         else
-            loc_l_quals = quals_l + reads_l_offset[rds_count_l_sum[idx - 1] - 1]; // you want to start from where previous contigs, last read ends. 
+            loc_l_quals = quals_l + reads_l_offset[rds_count_l_sum[warp_id_glb - 1] - 1]; // you want to start from where previous contigs, last read ends. 
         
-        loc_mer_map = global_ht + prefix_ht[idx - 1];
-        ht_loc_size = prefix_ht[idx] - prefix_ht[idx - 1];
+        loc_mer_map = global_ht + prefix_ht[warp_id_glb - 1];
+        ht_loc_size = prefix_ht[warp_id_glb] - prefix_ht[warp_id_glb - 1];
     }
+
+//data for contigs is mapped based on global thread ids (idx)
+// if( idx < tot_ctgs){
+//     if(idx == 0){
+//         loc_ctg.start_ptr = contigs;
+//         loc_ctg.length = ctg_offsets[idx];
+//         loc_bool_map = global_ht_bool + idx * max_walk_len;
+//         longest_walk_loc = longest_walks + idx * max_walk_len;
+//         loc_mer_walk_temp = mer_walk_temp + idx * (max_walk_len + max_mer_len_off);
+//     }else{
+//         loc_ctg.start_ptr = contigs + ctg_offsets[idx-1];
+//         loc_ctg.length = ctg_offsets[idx] - ctg_offsets[idx - 1];
+//         loc_bool_map = global_ht_bool + idx * max_walk_len;
+//         longest_walk_loc = longest_walks + idx * max_walk_len;
+//         loc_mer_walk_temp = mer_walk_temp + idx * (max_walk_len + max_mer_len_off);
+//     }
+// }
     max_ht_size = ht_loc_size;
     max_mer_len = min(max_mer_len, loc_ctg.length);
-    char* loc_mer_walk_temp = mer_walk_temp + idx * (max_walk_len + max_mer_len_off);
 
     cstr_type longest_walk_thread(longest_walk_loc,0);
 
@@ -380,13 +442,14 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
           // to preserve memory on GPU
           //TODO: need to reinitialize the hashtable after each kmer size is done
 
-        if(r_rds_cnt != 0){    //if read count is zero, no need to count mers
-
-            for(uint32_t k = 0; k < max_ht_size; k++){ // resetting hash table for next go
+       // if(r_rds_cnt != 0){    //commenting this out because the zero read counts are filtered out on cpu side
+    if(warp_id_glb < tot_ctgs){ // all warps within this range can go in execute count mers, for walk_mers only the lane 0 of each warp does the work
+            for(uint32_t k = lane_id; k < max_ht_size; k+=32){ // resetting hash table in parallel with warps
                 loc_mer_map[k].key.length = EMPTY;
             }
-            count_mers(loc_mer_map, loc_r_reads, max_ht_size, loc_r_quals, reads_r_offset, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads, idx);
-
+            count_mers(loc_mer_map, loc_r_reads, max_ht_size, loc_r_quals, reads_r_offset, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads, warp_id_glb);//passing warp_id instead of idx now
+        
+        if(lane_id == 0){ // this phase is processed by single thread of a warp
             cstr_type ctg_mer(loc_ctg.start_ptr + (loc_ctg.length - mer_len), mer_len);
             cstr_type loc_mer_walk(loc_mer_walk_temp, 0);
             cstr_copy(loc_mer_walk, ctg_mer);
@@ -394,7 +457,7 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
 
             #ifdef DEBUG_PRINT_GPU
             if(idx == test){
-                printf("read_count:%d, idx:%d\n",r_rds_cnt, idx);
+                printf("read_count:%d, idx:%d\n",r_rds_cnt, warp_id_blk);
                 printf("mer ctg len:%d mer_walk before:\n",loc_mer_walk.length);
                 print_mer(loc_mer_walk);
 
@@ -403,15 +466,15 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
             }
             #endif
 
-            for(uint32_t k = 0; k < max_walk_len; k++){ // resetting bool map for next go
+            for(uint32_t k = 0; k < max_walk_len; k++){ // resetting bool map for next go, TODO: can we use warps here?
                 loc_bool_map[k].key.length = EMPTY;
             }
             //TODO: initalize hash table find a faster way of doing this
-            char walk_res = walk_mers(loc_mer_map, loc_bool_map, max_ht_size, mer_len, loc_mer_walk, longest_walk_thread, walk, idx, max_walk_len);
+            char walk_res = walk_mers(loc_mer_map, loc_bool_map, max_ht_size, mer_len, loc_mer_walk, longest_walk_thread, walk, warp_id_glb, max_walk_len);
             #ifdef DEBUG_PRINT_GPU
             if(idx == test){
-                printf("walk_res:%c, idx:%d\n",walk_res, idx);
-                printf("GPU: walk.len:%d, longest.len:%d, idx:%d\n", walk.length, longest_walk_thread.length, idx);
+                printf("walk_res:%c, idx:%d\n",walk_res, warp_id_glb);
+                printf("GPU: walk.len:%d, longest.len:%d, idx:%d\n", walk.length, longest_walk_thread.length, warp_id_glb);
             }
             #endif
             //int walk_len = walk.length
@@ -446,19 +509,28 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
                   //  longest_walk_thread.length = 0;// TODO: DOUBLE CHECK WITH STEVE IF THIS IS CORRECT
                 shift = LASSM_SHIFT_SIZE;
             }
+                    // test if lane_id has exited, if so exit yourself
 
-        }else{
+        }// lane id cond ended
+        __syncwarp(FULL_MASK);
+        unsigned mask = __activemask();
+        unsigned active = mask & 1; // zero if lane 0 has returned
+        //printf("mask:%x, lande:%d, res:%d\n",mask, lane_id, active);
+        if(active == 0)
             break;
-        }
+        }//warp id cond end
+
     }
+    if(lane_id == 0){
     if(longest_walk_thread.length > 0){
-        final_walk_lens[idx] = longest_walk_thread.length;
+        final_walk_lens[warp_id_glb] = longest_walk_thread.length;
         // printf("final longest walk len:%d/n", longest_walk_thread.length);
         // print_mer(longest_walk_thread);
        // atomicAdd(num_walks, 1);
      //   atomicAdd(sum_ext, longest_walk_thread.length);
     }else{
-        final_walk_lens[idx] = 0;
+        final_walk_lens[warp_id_glb] = 0;
+    }
     }
 
     #ifdef DEBUG_PRINT_GPU

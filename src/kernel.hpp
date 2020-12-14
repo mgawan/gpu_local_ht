@@ -20,6 +20,7 @@
 #define LASSM_MIN_KMER_LEN 21
 #define LASSM_SHIFT_SIZE 8
 #define LASSM_MAX_KMER_LEN 121
+#define FULL_MASK 0xffffffff
 
 struct cstr_type{
     char* start_ptr;
@@ -46,10 +47,10 @@ struct cstr_type{
 __device__ void cstr_copy(cstr_type& str1, cstr_type& str2);
 
 struct ExtCounts {
-  uint16_t count_A;
-  uint16_t count_C;
-  uint16_t count_G;
-  uint16_t count_T;
+  uint32_t count_A;
+  uint32_t count_C;
+  uint32_t count_G;
+  uint32_t count_T;
 
   __device__ void print(){
     printf("count_A:%d, count_C:%d, count_G:%d, count_T:%d\n", count_A, count_C, count_G, count_T);
@@ -59,22 +60,40 @@ struct ExtCounts {
   __device__
   void inc(char ext, int count) {
   //  printf("******inc called******\n");
+    unsigned mask = 0;
+    int to_add = 0;
     switch (ext) {
       case 'A':
+        mask = __activemask();
         count += count_A;
-        count_A = (count < 65535) ? count : 65535;
+        __syncwarp(mask);
+        to_add = (count < 65535) ? count : 65535;
+        count_A = 0;
+        atomicAdd(&count_A,to_add);
         break;
       case 'C':
+        mask = __activemask();
         count += count_C;
-        count_C = (count < 65535) ? count : 65535;
+        __syncwarp(mask);
+        to_add = (count < 65535) ? count : 65535;
+        count_C = 0;
+        atomicAdd(&count_C,to_add);
         break;
       case 'G':
+        mask = __activemask();
         count += count_G;
-        count_G = (count < 65535) ? count : 65535;
+        __syncwarp(mask);
+        to_add = (count < 65535) ? count : 65535;
+        count_G = 0;
+        atomicAdd(&count_G,to_add);
         break;
       case 'T':
+        mask = __activemask();
         count += count_T;
-        count_T = (count < 65535) ? count : 65535;
+        __syncwarp(mask);
+        to_add = (count < 65535) ? count : 65535;
+        count_T = 0;
+        atomicAdd(&count_T,to_add);
         break;
     }
   }
@@ -83,7 +102,7 @@ struct ExtCounts {
 
   struct MerBase {
     char base;
-    uint16_t nvotes_hi_q, nvotes, rating;
+    uint32_t nvotes_hi_q, nvotes, rating;
     __device__ void print(){
       printf("base:%c, nvotes_hiq_q:%d, nvotes:%d, rating:%d\n", base, nvotes_hi_q, nvotes, rating);
     }
@@ -229,7 +248,7 @@ __device__ void ht_delete(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_si
 __device__ loc_ht& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size);
 __device__ unsigned hash_func(cstr_type key, uint32_t max_size);
 __device__ void count_mers(loc_ht* thrd_loc_ht, char* loc_r_reads, uint32_t max_ht_size, char* loc_r_quals, int32_t* reads_r_offset, int32_t& r_rds_cnt, 
-int32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_offset, int64_t& excess_reads, const int idx);
+int32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_offset, int64_t& excess_reads, const long int idx);
 __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32_t max_ht_size, int& mer_len, cstr_type& mer_walk_temp, cstr_type& longest_walk, cstr_type& walk, const int idx, int max_walk_len);
 __global__ void iterative_walks_kernel(uint32_t* cid, uint32_t* ctg_offsets, char* contigs, 
 char* reads_l, char* reads_r, char* quals_r, char* quals_l, uint32_t* reads_l_offset, uint32_t* reads_r_offset, uint32_t* rds_count_l_sum, uint32_t* rds_count_r_sum, 

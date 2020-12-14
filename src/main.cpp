@@ -28,7 +28,7 @@ struct accum_data{
     std::vector<uint32_t> ctg_sizes;
 };
 
-std::ofstream ofile("./profiling/corr_out.dat");
+std::ofstream ofile("/global/cscratch1/sd/mgawan/local_assem_large/haswell_large/merged/test-results/test-out.dat");
 void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len,int max_reads_count, accum_data& sizes_outliers);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
@@ -55,7 +55,7 @@ int main (int argc, char* argv[]){
         CtgWithReads temp_in = data_in[i];
         if(temp_in.max_reads == 0){
             zero_slice.push_back(temp_in);
-        }else if(temp_in.max_reads > 0 && temp_in.max_reads < 10){
+        }else /*if(temp_in.max_reads > 0 && temp_in.max_reads < 10)*/{
             mid_slice.push_back(temp_in);
             uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
             sizes_mid.ht_sizes.push_back(temp_ht_size);
@@ -84,22 +84,22 @@ int main (int argc, char* argv[]){
         //     if(midsup_max_contig_sz < temp_in.seq.size())
         //         midsup_max_contig_sz = temp_in.seq.size();
         // }
-        else{
-            outlier_slice.push_back(temp_in);
-            uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
-            sizes_outliers.ht_sizes.push_back(temp_ht_size);
-            sizes_outliers.ctg_sizes.push_back(temp_in.seq.size());
-            sizes_outliers.l_reads_count.push_back(temp_in.reads_left.size());
-            sizes_outliers.r_reads_count.push_back(temp_in.reads_right.size());
-            outliers_tot_r_reads += temp_in.reads_right.size();
-            outliers_tot_l_reads += temp_in.reads_left.size();
-            if(outlier_l_max < temp_in.reads_left.size())
-                outlier_l_max = temp_in.reads_left.size();
-            if(outlier_r_max < temp_in.reads_right.size())
-                outlier_r_max = temp_in.reads_right.size();
-            if(outliers_max_contig_sz < temp_in.seq.size())
-                outliers_max_contig_sz = temp_in.seq.size();
-        }
+        // else{
+        //     outlier_slice.push_back(temp_in);
+        //     uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
+        //     sizes_outliers.ht_sizes.push_back(temp_ht_size);
+        //     sizes_outliers.ctg_sizes.push_back(temp_in.seq.size());
+        //     sizes_outliers.l_reads_count.push_back(temp_in.reads_left.size());
+        //     sizes_outliers.r_reads_count.push_back(temp_in.reads_right.size());
+        //     outliers_tot_r_reads += temp_in.reads_right.size();
+        //     outliers_tot_l_reads += temp_in.reads_left.size();
+        //     if(outlier_l_max < temp_in.reads_left.size())
+        //         outlier_l_max = temp_in.reads_left.size();
+        //     if(outlier_r_max < temp_in.reads_right.size())
+        //         outlier_r_max = temp_in.reads_right.size();
+        //     if(outliers_max_contig_sz < temp_in.seq.size())
+        //         outliers_max_contig_sz = temp_in.seq.size();
+        // }
     }
 
     print_vals("zeroes, count:", zero_slice.size());
@@ -121,10 +121,10 @@ int main (int argc, char* argv[]){
     // max_reads_count = 100;
     // call_kernel(midsup_slice, midsup_max_contig_sz, midsup_tot_r_reads, midsup_tot_l_reads, max_read_size, midsup_r_max, midsup_l_max, max_mer_len,max_reads_count, ht_size_midsup);
 
-    print_vals("outliers calling", "outliers count:", outlier_slice.size());
-     max_reads_count = 239;
-  //  overall_time.timer_start();
-    call_kernel(outlier_slice, outliers_max_contig_sz, max_read_size, outlier_r_max, outlier_l_max, max_mer_len, max_reads_count, sizes_outliers);
+//     print_vals("outliers calling", "outliers count:", outlier_slice.size());
+//      max_reads_count = 239;
+//   //  overall_time.timer_start();
+//     call_kernel(outlier_slice, outliers_max_contig_sz, max_read_size, outlier_r_max, outlier_l_max, max_mer_len, max_reads_count, sizes_outliers);
     //overall_time.timer_end();
     overall_time.timer_end();
     
@@ -410,9 +410,9 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
         tim_temp.timer_end();
         data_mv_tim += tim_temp.get_total_time();
             //call kernel here, one thread per contig
-        unsigned total_threads = vec_size;
-        unsigned thread_per_blk = 512;
-        unsigned blocks = (vec_size + thread_per_blk)/thread_per_blk;
+        unsigned total_threads = vec_size*32;// we need one warp (32 threads) per extension, vec_size = extensions
+        unsigned thread_per_blk = 256;
+        unsigned blocks = (total_threads + thread_per_blk)/thread_per_blk;
         
 
         print_vals("Calling Kernel with blocks:", blocks, "Threads:", thread_per_blk);
