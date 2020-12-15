@@ -235,7 +235,7 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
     cstr_type qual;
     uint32_t running_sum_len = 0;
     #ifdef DEBUG_PRINT_GPU
-    int test = 0;
+    int test = 1;
     if(DEBUG_PRINT_GPU && idx == test)
         printf("inside_count_mers\n");
     #endif
@@ -259,12 +259,13 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
             else{  
                 // printf("idx:%d, r_rdsx_cnt: %d, i: %d \n", idx, r_rds_cnt, i); 
                 // printf("i:%d, rds_count:%d, idx:%d, thread:%d, blk:%d\n", i, r_rds_cnt, idx, threadIdx.x, blockIdx.x); 
-                read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
-                qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
                 #ifdef DEBUG_PRINT_GPU
                 if(DEBUG_PRINT_GPU && idx == test)
-                    printf("rds_count_r_sum[idx]:%d, rds_cnt:%d, reads_offset_0:%d, thread:%d\n",rds_count_r_sum[idx], r_rds_cnt, read.length, threadIdx.x);
+                    printf("rds_count_r_sum[idx]:%d,rds_count_r_sum[idx-1]:%d,i:%d, rds_cnt:%d, reads_offset_0:%d, thread:%d\n",rds_count_r_sum[idx], rds_count_r_sum[idx-1],i, r_rds_cnt, read.length, threadIdx.x);
                 #endif
+                read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
+                qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
+ \
                 }
         }
         else{
@@ -351,7 +352,7 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
     char* longest_walk_loc;// = longest_walks + idx * max_walk_len;
     char* loc_mer_walk_temp;
     #ifdef DEBUG_PRINT_GPU
-    int test = 0;
+    int test = 1;
     #endif
 
     int min_mer_len = LASSM_MIN_KMER_LEN;
