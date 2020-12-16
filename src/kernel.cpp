@@ -235,7 +235,7 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
     cstr_type qual;
     uint32_t running_sum_len = 0;
     #ifdef DEBUG_PRINT_GPU
-    int test = 1;
+    int test = 0;
     if(DEBUG_PRINT_GPU && idx == test)
         printf("inside_count_mers\n");
     #endif
@@ -263,10 +263,14 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
                 if(DEBUG_PRINT_GPU && idx == test)
                     printf("rds_count_r_sum[idx]:%d,rds_count_r_sum[idx-1]:%d,i:%d, rds_cnt:%d, reads_offset_0:%d, thread:%d\n",rds_count_r_sum[idx], rds_count_r_sum[idx-1],i, r_rds_cnt, read.length, threadIdx.x);
                 #endif
-                read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
-                qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
- \
-                }
+                if(rds_count_r_sum[idx - 1] == 0){
+                    read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i];
+                    qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i];                    
+                }else{
+                    read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
+                    qual.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx - 1] -1)];
+                 }
+            }
         }
         else{
             read.length = reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + i] - reads_r_offset[(rds_count_r_sum[idx] - r_rds_cnt) + (i-1)];
@@ -313,7 +317,8 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
 
     //setting extension by traversing the completed table
     // TODO: think of a better way to do this
-    for (int k = lane_id; k < max_ht_size; k+=32) {
+    //if(threadIdx.x == 0){
+    for (int k = 0; k < max_ht_size; k+=1) {
         if( thrd_loc_ht[k].key.length != EMPTY){
             thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
             #ifdef DEBUG_PRINT_GPU
@@ -327,6 +332,7 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
             #endif
         }
     }
+  //  }
 }
 
 //same kernel will be used for right and left walks

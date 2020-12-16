@@ -28,7 +28,7 @@ struct accum_data{
     std::vector<uint32_t> ctg_sizes;
 };
 
-std::ofstream ofile("/global/cscratch1/sd/mgawan/local_assem_large/haswell_large/merged/test-results/test-out.dat");
+std::ofstream ofile("./debugging_temp/test-out.dat");
 void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len,int max_reads_count, accum_data& sizes_outliers);
 //TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
 // and contigs with only left are launched in left kernels.
@@ -500,6 +500,7 @@ print_vals("Total Packing Time:", packing_tim);
         if(final_walk_lens_l_h[j*slice_size + i] != 0){
             std::string left(&longest_walks_l_h[j*slice_size*max_walk_len + max_walk_len*i],final_walk_lens_l_h[j*slice_size + i]);
             std::string left_rc = revcomp(left);
+           // print_vals("cid:",data_in[j*slice_size + i].cid, "walk:",left);
             data_in[j*slice_size + i].seq.insert(0,left_rc);  
         }
         if(final_walk_lens_r_h[j*slice_size + i] != 0){
