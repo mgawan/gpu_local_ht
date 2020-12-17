@@ -55,7 +55,7 @@ int main (int argc, char* argv[]){
         CtgWithReads temp_in = data_in[i];
         if(temp_in.max_reads == 0){
             zero_slice.push_back(temp_in);
-        }else /*if(temp_in.max_reads > 0 && temp_in.max_reads < 10)*/{
+        }else if(temp_in.max_reads > 0 && temp_in.max_reads < 10){
             mid_slice.push_back(temp_in);
             uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
             sizes_mid.ht_sizes.push_back(temp_ht_size);
@@ -84,22 +84,22 @@ int main (int argc, char* argv[]){
         //     if(midsup_max_contig_sz < temp_in.seq.size())
         //         midsup_max_contig_sz = temp_in.seq.size();
         // }
-        // else{
-        //     outlier_slice.push_back(temp_in);
-        //     uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
-        //     sizes_outliers.ht_sizes.push_back(temp_ht_size);
-        //     sizes_outliers.ctg_sizes.push_back(temp_in.seq.size());
-        //     sizes_outliers.l_reads_count.push_back(temp_in.reads_left.size());
-        //     sizes_outliers.r_reads_count.push_back(temp_in.reads_right.size());
-        //     outliers_tot_r_reads += temp_in.reads_right.size();
-        //     outliers_tot_l_reads += temp_in.reads_left.size();
-        //     if(outlier_l_max < temp_in.reads_left.size())
-        //         outlier_l_max = temp_in.reads_left.size();
-        //     if(outlier_r_max < temp_in.reads_right.size())
-        //         outlier_r_max = temp_in.reads_right.size();
-        //     if(outliers_max_contig_sz < temp_in.seq.size())
-        //         outliers_max_contig_sz = temp_in.seq.size();
-        // }
+        else{
+            outlier_slice.push_back(temp_in);
+            uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
+            sizes_outliers.ht_sizes.push_back(temp_ht_size);
+            sizes_outliers.ctg_sizes.push_back(temp_in.seq.size());
+            sizes_outliers.l_reads_count.push_back(temp_in.reads_left.size());
+            sizes_outliers.r_reads_count.push_back(temp_in.reads_right.size());
+            outliers_tot_r_reads += temp_in.reads_right.size();
+            outliers_tot_l_reads += temp_in.reads_left.size();
+            if(outlier_l_max < temp_in.reads_left.size())
+                outlier_l_max = temp_in.reads_left.size();
+            if(outlier_r_max < temp_in.reads_right.size())
+                outlier_r_max = temp_in.reads_right.size();
+            if(outliers_max_contig_sz < temp_in.seq.size())
+                outliers_max_contig_sz = temp_in.seq.size();
+        }
     }
 
     print_vals("zeroes, count:", zero_slice.size());
@@ -117,14 +117,14 @@ int main (int argc, char* argv[]){
     
     int max_reads_count = 10;
     call_kernel(mid_slice, mid_max_contig_sz, max_read_size, mid_r_max, mid_l_max, max_mer_len,max_reads_count, sizes_mid);
-    // print_vals("midsup calling",  "mids count:", midsup_slice.size());
+    print_vals("midsup calling",  "mids count:", midsup_slice.size());
     // max_reads_count = 100;
     // call_kernel(midsup_slice, midsup_max_contig_sz, midsup_tot_r_reads, midsup_tot_l_reads, max_read_size, midsup_r_max, midsup_l_max, max_mer_len,max_reads_count, ht_size_midsup);
 
-//     print_vals("outliers calling", "outliers count:", outlier_slice.size());
-//      max_reads_count = 239;
-//   //  overall_time.timer_start();
-//     call_kernel(outlier_slice, outliers_max_contig_sz, max_read_size, outlier_r_max, outlier_l_max, max_mer_len, max_reads_count, sizes_outliers);
+    print_vals("outliers calling", "outliers count:", outlier_slice.size());
+    // max_reads_count = 239;
+  //  overall_time.timer_start();
+    call_kernel(outlier_slice, outliers_max_contig_sz, max_read_size, outlier_r_max, outlier_l_max, max_mer_len, max_reads_count, sizes_outliers);
     //overall_time.timer_end();
     overall_time.timer_end();
     
@@ -500,7 +500,7 @@ print_vals("Total Packing Time:", packing_tim);
         if(final_walk_lens_l_h[j*slice_size + i] != 0){
             std::string left(&longest_walks_l_h[j*slice_size*max_walk_len + max_walk_len*i],final_walk_lens_l_h[j*slice_size + i]);
             std::string left_rc = revcomp(left);
-           // print_vals("cid:",data_in[j*slice_size + i].cid, "walk:",left);
+            //print_vals("cid:",data_in[j*slice_size + i].cid, "walk:",left, "length:",final_walk_lens_l_h[j*slice_size + i]);
             data_in[j*slice_size + i].seq.insert(0,left_rc);  
         }
         if(final_walk_lens_r_h[j*slice_size + i] != 0){

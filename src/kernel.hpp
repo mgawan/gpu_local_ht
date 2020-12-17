@@ -22,6 +22,7 @@
 #define LASSM_MAX_KMER_LEN 121
 #define FULL_MASK 0xffffffff
 
+
 struct cstr_type{
     char* start_ptr;
     int length;
