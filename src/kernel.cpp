@@ -328,7 +328,7 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
 
     //setting extension by traversing the completed table
     // TODO: think of a better way to do this
-    for (int k = 0; k < max_ht_size; k+=1) {
+    for (int k = lane_id; k < max_ht_size; k+=32) {
         if( thrd_loc_ht[k].key.length != EMPTY){
             thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
             #ifdef DEBUG_PRINT_GPU
