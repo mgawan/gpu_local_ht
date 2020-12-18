@@ -464,7 +464,9 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
                 loc_mer_map[k].key.length = EMPTY;
             }
             count_mers(loc_mer_map, loc_r_reads, max_ht_size, loc_r_quals, reads_r_offset, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads, warp_id_glb);//passing warp_id instead of idx now
-        
+            for(uint32_t k = lane_id; k < max_walk_len; k+=32){ // resetting bool map for next go, TODO: can we use warps here?
+                loc_bool_map[k].key.length = EMPTY;
+            }
         if(lane_id == 0){ // this phase is processed by single thread of a warp
             cstr_type ctg_mer(loc_ctg.start_ptr + (loc_ctg.length - mer_len), mer_len);
             cstr_type loc_mer_walk(loc_mer_walk_temp, 0);
@@ -482,9 +484,9 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
             }
             #endif
 
-            for(uint32_t k = 0; k < max_walk_len; k++){ // resetting bool map for next go, TODO: can we use warps here?
-                loc_bool_map[k].key.length = EMPTY;
-            }
+            // for(uint32_t k = 0; k < max_walk_len; k++){ // resetting bool map for next go, TODO: can we use warps here?
+            //     loc_bool_map[k].key.length = EMPTY;
+            // }
             //TODO: initalize hash table find a faster way of doing this
             char walk_res = walk_mers(loc_mer_map, loc_bool_map, max_ht_size, mer_len, loc_mer_walk, longest_walk_thread, walk, warp_id_glb, max_walk_len);
             #ifdef DEBUG_PRINT_GPU
