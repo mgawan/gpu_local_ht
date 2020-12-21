@@ -1,8 +1,4 @@
-##--maxrregcount=32 
-NVFLAGS=--std=c++11 -lineinfo --gpu-architecture=sm_80
-ifeq ($(DEBUG),TRUE)
-	NVFLAGS+=-g -G
-endif
+NVFLAGS=--std=c++11 --gpu-architecture=sm_70 -lineinfo
 ifeq ($(DEBUG_CPU),TRUE)
 	NVFLAGS+=-DDEBUG_CPU
 endif
