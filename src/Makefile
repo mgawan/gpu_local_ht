@@ -1,4 +1,4 @@
-NVFLAGS=--std=c++11 --gpu-architecture=sm_70 -lineinfo
+NVFLAGS=--std=c++11 --gpu-architecture=sm_80
 ifeq ($(DEBUG_CPU),TRUE)
 	NVFLAGS+=-DDEBUG_CPU
 endif
