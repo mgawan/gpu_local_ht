@@ -65,36 +65,36 @@ struct ExtCounts {
     int to_add = 0;
     switch (ext) {
       case 'A':
-        mask = __activemask();
-        count += count_A;
-        __syncwarp(mask);
-        to_add = (count < 65535) ? count : 65535;
-        count_A = 0;
-        atomicAdd(&count_A,to_add);
+        // mask = __activemask();
+        // count += count_A;
+        // __syncwarp(mask);
+        // to_add = (count < 65535) ? count : 65535;
+        // count_A = 0;
+        atomicAdd(&count_A,count);
         break;
       case 'C':
-        mask = __activemask();
-        count += count_C;
-        __syncwarp(mask);
-        to_add = (count < 65535) ? count : 65535;
-        count_C = 0;
-        atomicAdd(&count_C,to_add);
+        // mask = __activemask();
+        // count += count_C;
+        // __syncwarp(mask);
+        // to_add = (count < 65535) ? count : 65535;
+        // count_C = 0;
+        atomicAdd(&count_C,count);
         break;
       case 'G':
-        mask = __activemask();
-        count += count_G;
-        __syncwarp(mask);
-        to_add = (count < 65535) ? count : 65535;
-        count_G = 0;
-        atomicAdd(&count_G,to_add);
+        // mask = __activemask();
+        // count += count_G;
+        // __syncwarp(mask);
+        // to_add = (count < 65535) ? count : 65535;
+        // count_G = 0;
+        atomicAdd(&count_G,count);
         break;
       case 'T':
-        mask = __activemask();
-        count += count_T;
-        __syncwarp(mask);
-        to_add = (count < 65535) ? count : 65535;
-        count_T = 0;
-        atomicAdd(&count_T,to_add);
+        // mask = __activemask();
+        // count += count_T;
+        // __syncwarp(mask);
+        // to_add = (count < 65535) ? count : 65535;
+        // count_T = 0;
+        atomicAdd(&count_T,count);
         break;
     }
   }

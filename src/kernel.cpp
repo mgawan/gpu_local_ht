@@ -310,6 +310,7 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
             //     temp_Mer.key = mer;
             //     temp_Mer.val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0};
             // }
+            
             int ext_pos = start + mer_len;
           //  assert(ext_pos < (int)read.length); // TODO: verify that assert works on gpu, for now commenting it out and replacing with printf
           if(ext_pos >= (int) read.length)
@@ -319,8 +320,6 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
             int qual_diff = qual.start_ptr[ext_pos] - qual_offset;
             if (qual_diff >= LASSM_MIN_QUAL) temp_Mer.val.low_q_exts.inc(ext, 1);
             if (qual_diff >= LASSM_MIN_HI_QUAL) temp_Mer.val.hi_q_exts.inc(ext, 1);
-            
-           // mer.start_ptr = mer.start_ptr + 1;
         }
         __syncwarp();
        running_sum_len += read.length; // right before the for loop ends, update the prev_len to offset next read correctly
@@ -331,17 +330,24 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
     for (int k = lane_id; k < max_ht_size; k+=32) {
         if( thrd_loc_ht[k].key.length != EMPTY){
             thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
-            #ifdef DEBUG_PRINT_GPU
-            if(DEBUG_PRINT_GPU && idx == test && lane_id == 0){
-                printf("from ht:\n");
-                print_mer(thrd_loc_ht[k].key);
-                printf("MerFreq.ext:%c, MerFreq.count:%d\n",thrd_loc_ht[k].val.ext,thrd_loc_ht[k].val.count);
-                thrd_loc_ht[k].val.hi_q_exts.print();
-                thrd_loc_ht[k].val.low_q_exts.print();
-            }
-            #endif
         }
     }
+    __syncwarp();
+
+    // #ifdef DEBUG_PRINT_GPU
+    // if(threadIdx.x == test){
+    // for(int k = 0; k < max_ht_size; k++){
+    // //if(DEBUG_PRINT_GPU && idx == test && lane_id == 0){
+    //     if( thrd_loc_ht[k].key.length != EMPTY){
+    //     printf("from ht:\n");
+    //     print_mer(thrd_loc_ht[k].key);
+    //     printf("MerFreq.ext:%c, MerFreq.count:%d\n",thrd_loc_ht[k].val.ext,thrd_loc_ht[k].val.count);
+    //     thrd_loc_ht[k].val.hi_q_exts.print();
+    //     thrd_loc_ht[k].val.low_q_exts.print();
+    // }
+    // }
+    // }
+    // #endif
 }
 
 //same kernel will be used for right and left walks
@@ -445,6 +451,7 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
 
     //main for loop
     int shift = 0;
+
     for(int mer_len = kmer_len; mer_len >= min_mer_len && mer_len <= max_mer_len; mer_len += shift){
             #ifdef DEBUG_PRINT_GPU
             if(warp_id_glb == test){
