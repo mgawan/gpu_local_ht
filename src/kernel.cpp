@@ -45,6 +45,138 @@ __device__ unsigned hash_func(cstr_type key, uint32_t max_size){
     //TODO: this way of limiting hash value is not good, try to find a better way
     return hash%max_size;//(hash & (HT_SIZE - 1));
 }
+#define MIX(h,k,m) { k *= m; k ^= k >> r; k *= m; h *= m; h ^= k; }
+
+__device__
+uint32_t MurmurHashAligned2 (cstr_type key_in, uint32_t max_size)
+{
+  int len = key_in.length;
+  char* key = key_in.start_ptr;
+  const uint32_t m = 0x5bd1e995;
+  const int r = 24;
+  uint32_t seed = 0x3FB0BB5F;
+
+  const unsigned char * data = (const unsigned char *)key;
+
+  uint32_t h = seed ^ len;
+
+  int align = (uint64_t)data & 3;
+
+  if(align && (len >= 4))
+  {
+    /* Pre-load the temp registers  */
+
+    uint32_t t = 0, d = 0;
+
+    switch(align)
+    {
+      case 1: t |= data[2] << 16;
+      case 2: t |= data[1] << 8;
+      case 3: t |= data[0];
+    }
+
+    t <<= (8 * align);
+
+    data += 4-align;
+    len -= 4-align;
+
+    int sl = 8 * (4-align);
+    int sr = 8 * align;
+
+    /* Mix */
+
+    while(len >= 4)
+    {
+      d = *(uint32_t *)data;
+      t = (t >> sr) | (d << sl);
+
+      uint32_t k = t;
+
+      MIX(h,k,m);
+
+      t = d;
+
+      data += 4;
+      len -= 4;
+    }
+
+    /* Handle leftover data in temp registers  */
+
+    d = 0;
+
+    if(len >= align)
+    {
+      switch(align)
+      {
+      case 3: d |= data[2] << 16;
+      case 2: d |= data[1] << 8;
+      case 1: d |= data[0];
+      }
+
+      uint32_t k = (t >> sr) | (d << sl);
+      MIX(h,k,m);
+
+      data += align;
+      len -= align;
+
+      /* Handle tail bytes  */
+
+      switch(len)
+      {
+      case 3: h ^= data[2] << 16;
+      case 2: h ^= data[1] << 8;
+      case 1: h ^= data[0];
+          h *= m;
+      };
+    }
+    else
+    {
+      switch(len)
+      {
+      case 3: d |= data[2] << 16;
+      case 2: d |= data[1] << 8;
+      case 1: d |= data[0];
+      case 0: h ^= (t >> sr) | (d << sl);
+          h *= m;
+      }
+    }
+
+    h ^= h >> 13;
+    h *= m;
+    h ^= h >> 15;
+
+    return h%max_size;
+  }
+  else
+  {
+    while(len >= 4)
+    {
+      uint32_t k = *(uint32_t *)data;
+
+      MIX(h,k,m);
+
+      data += 4;
+      len -= 4;
+    }
+
+    /* Handle tail bytes  */
+
+    switch(len)
+    {
+    case 3: h ^= data[2] << 16;
+    case 2: h ^= data[1] << 8;
+    case 1: h ^= data[0];
+        h *= m;
+    };
+
+    h ^= h >> 13;
+    h *= m;
+    h ^= h >> 15;
+
+    return h%max_size;
+  }
+}
+
 
 __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, MerFreqs mer_val, uint32_t max_size){
     unsigned hash_val = hash_func(kmer_key, max_size);
@@ -83,7 +215,7 @@ __device__ void ht_insert(loc_ht_bool* thread_ht, cstr_type kmer_key, bool bool_
 
 __device__ 
 loc_ht& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
-    unsigned hash_val = hash_func(kmer_key, max_size);
+    unsigned hash_val = MurmurHashAligned2(kmer_key, max_size);
     unsigned orig_hash = hash_val;
     
     while(true){
@@ -109,7 +241,7 @@ loc_ht& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
 //overload for bool vals
 __device__ 
 loc_ht_bool& ht_get(loc_ht_bool* thread_ht, cstr_type kmer_key, uint32_t max_size){
-    unsigned hash_val = hash_func(kmer_key, max_size);
+    unsigned hash_val = MurmurHashAligned2(kmer_key, max_size);
     unsigned orig_hash = hash_val;
     
     while(true){
@@ -133,7 +265,7 @@ loc_ht_bool& ht_get(loc_ht_bool* thread_ht, cstr_type kmer_key, uint32_t max_siz
 
 __device__ 
 loc_ht& ht_get_atomic(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
-    unsigned hash_val = hash_func(kmer_key, max_size);
+    unsigned hash_val = MurmurHashAligned2(kmer_key, max_size);
     unsigned orig_hash = hash_val;
 
     while(true){
