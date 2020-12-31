@@ -452,6 +452,8 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
             int qual_diff = qual.start_ptr[ext_pos] - qual_offset;
             if (qual_diff >= LASSM_MIN_QUAL) temp_Mer.val.low_q_exts.inc(ext, 1);
             if (qual_diff >= LASSM_MIN_HI_QUAL) temp_Mer.val.hi_q_exts.inc(ext, 1);
+
+            temp_Mer.val.set_ext(loc_ctg_depth);
         }
         __syncwarp();
        running_sum_len += read.length; // right before the for loop ends, update the prev_len to offset next read correctly
@@ -459,11 +461,11 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
 
     //setting extension by traversing the completed table
     // TODO: think of a better way to do this
-    for (int k = lane_id; k < max_ht_size; k+=32) {
-        if( thrd_loc_ht[k].key.length != EMPTY){
-            thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
-        }
-    }
+    // for (int k = lane_id; k < max_ht_size; k+=32) {
+    //     if( thrd_loc_ht[k].key.length != EMPTY){
+    //         thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
+    //     }
+    // }
     __syncwarp();
 
     // #ifdef DEBUG_PRINT_GPU
