@@ -30,8 +30,7 @@ struct accum_data{
 
 std::ofstream ofile("/global/cscratch1/sd/mgawan/local_assem_large/haswell_large/merged/test-results/test-out.dat");
 void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len,int max_reads_count, accum_data& sizes_outliers);
-//TODO: DO it such that contigs with now left or righ reads are offloaded to kernels, then try to make separate left and right kernels so that contigs only right reads are launched in right kernel
-// and contigs with only left are launched in left kernels.
+
 // sample cmd line: ./build/ht_loc ../locassm_data/localassm_extend_7-21.dat ./out_file <kmer_size>
 int main (int argc, char* argv[]){
 
@@ -297,9 +296,7 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
     // if we separate out kernels for right and left walks then we can use r_count/l_count separately but for now use the max of two
     // also subtract the appropriate kmer length from max_read_size to reduce memory footprint of global ht_loc.
     // one local hashtable for each thread, so total hash_tables equal to vec_size i.e. total contigs
-    // TODO: to account for overfilling of the hashtable, consider assuming load factor of 0.8 and add a cushion of memory in hashtable
     CUDA_CHECK(cudaMalloc(&d_ht, sizeof(loc_ht)*max_ht)); //**changed for new modifications
-    //TODO: come back to this and see if we can find a better approximation of longest walk size
     CUDA_CHECK(cudaMalloc(&longest_walks_d, sizeof(char)*slice_size * max_walk_len));
     CUDA_CHECK(cudaMalloc(&mer_walk_temp_d, (max_mer_len + max_walk_len) * sizeof(char) * slice_size));
     CUDA_CHECK(cudaMalloc(&d_ht_bool, sizeof(loc_ht_bool) * slice_size * max_walk_len));
@@ -392,7 +389,6 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
 
         tim_temp.timer_start();
         print_vals("Host to Device Transfer...");
-        //TODO: get rid of offsets by keeping uniform space between contigs, reads, this will reduce data movements but increase memory required on GPU.
         CUDA_CHECK(cudaMemcpy(prefix_ht_size_d, prefix_ht_size_h, sizeof(uint32_t) * vec_size, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(cid_d, cid_h, sizeof(uint32_t) * vec_size, cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(ctg_seq_offsets_d, ctg_seq_offsets_h, sizeof(uint32_t) * vec_size, cudaMemcpyHostToDevice));
@@ -421,10 +417,10 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
         uint32_t qual_offset = 33;
         //kernel_time.timer_start();
         //TODO: pass only the read that needs to be extended, change the related code inside the kernel as well.
-        iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, reads_right_d, quals_right_d, quals_left_d, reads_l_offset_d, reads_r_offset_d, rds_l_cnt_offset_d, rds_r_cnt_offset_d, 
+        iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_right_d, quals_right_d, reads_r_offset_d, rds_r_cnt_offset_d, 
         depth_d, d_ht, prefix_ht_size_d, d_ht_bool, max_mer_len, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, qual_offset, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
 
-        CUDA_CHECK(cudaDeviceSynchronize());
+       // CUDA_CHECK(cudaDeviceSynchronize());
 
         //perform revcomp of contig sequences and launch kernel with left reads, TODO: move right and left reads data separately
         print_vals("revcomp-ing the contigs for next kernel");
@@ -471,9 +467,9 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
        // transfer_time += gpu_transfer.get_total_time();
         // launching kernel by swapping right and left reads, TODO: make this correct
         //kernel_time.timer_start();
-        iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_right_d, reads_left_d, quals_left_d, quals_right_d, reads_r_offset_d, reads_l_offset_d, rds_r_cnt_offset_d, rds_l_cnt_offset_d, 
+        iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, quals_left_d, reads_l_offset_d, rds_l_cnt_offset_d, 
         depth_d, d_ht, prefix_ht_size_d, d_ht_bool, max_mer_len, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, qual_offset, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
-        CUDA_CHECK(cudaDeviceSynchronize());
+        //CUDA_CHECK(cudaDeviceSynchronize());
         //kernel_time.timer_end();
        // double left_kernel_time = kernel_time.get_total_time();
         print_vals("Device to Host Transfer...", "Copying back left walks");

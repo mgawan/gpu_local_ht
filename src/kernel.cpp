@@ -485,8 +485,7 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
 }
 
 //same kernel will be used for right and left walks
-__global__ void iterative_walks_kernel(uint32_t* cid, uint32_t* ctg_offsets, char* contigs, 
-char* reads_l, char* reads_r, char* quals_r, char* quals_l, uint32_t* reads_l_offset, uint32_t* reads_r_offset, uint32_t* rds_count_l_sum, uint32_t* rds_count_r_sum, 
+__global__ void iterative_walks_kernel(uint32_t* cid, uint32_t* ctg_offsets, char* contigs, char* reads_r, char* quals_r,  uint32_t* reads_r_offset,  uint32_t* rds_count_r_sum, 
 double* ctg_depth, loc_ht* global_ht,  uint32_t* prefix_ht, loc_ht_bool* global_ht_bool, int kmer_len, uint32_t max_mer_len_off, uint32_t *term_counts, int64_t num_walks, int64_t max_walk_len, 
 int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_offset, char* longest_walks, char* mer_walk_temp, uint32_t* final_walk_lens, int tot_ctgs)
 {
@@ -496,8 +495,8 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
     const long int lane_id = threadIdx.x%32;
     if(warp_id_glb < tot_ctgs){ // so that no out of bound accesses 
     cstr_type loc_ctg;
-    char *loc_r_reads, *loc_l_reads, *loc_r_quals, *loc_l_quals;
-    uint32_t r_rds_cnt, l_rds_cnt, loc_rds_r_offset, loc_rds_l_offset;
+    char *loc_r_reads, *loc_r_quals;
+    uint32_t r_rds_cnt, loc_rds_r_offset;
     loc_ht* loc_mer_map;// = global_ht + idx * max_read_size * max_read_count;
     uint32_t ht_loc_size;
     loc_ht_bool* loc_bool_map;// = global_ht_bool + idx * max_walk_len;
@@ -521,11 +520,8 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
         longest_walk_loc = longest_walks + warp_id_glb * max_walk_len;
         loc_mer_walk_temp = mer_walk_temp + warp_id_glb * (max_walk_len + max_mer_len_off);
         r_rds_cnt = rds_count_r_sum[warp_id_glb];
-        l_rds_cnt = rds_count_l_sum[warp_id_glb];
         loc_r_reads = reads_r;
-        loc_l_reads = reads_l;
         loc_r_quals = quals_r;
-        loc_l_quals = quals_l;
         loc_mer_map = global_ht;
         ht_loc_size = prefix_ht[warp_id_glb];
         loc_ctg_depth = ctg_depth[warp_id_glb];
@@ -537,47 +533,20 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
         loc_mer_walk_temp = mer_walk_temp + warp_id_glb * (max_walk_len + max_mer_len_off);
         loc_ctg_depth = ctg_depth[warp_id_glb];
         r_rds_cnt = rds_count_r_sum[warp_id_glb] - rds_count_r_sum[warp_id_glb - 1];
-        l_rds_cnt = rds_count_l_sum[warp_id_glb] - rds_count_l_sum[warp_id_glb - 1];
         if (rds_count_r_sum[warp_id_glb - 1] == 0)
             loc_r_reads = reads_r;
         else
             loc_r_reads = reads_r + reads_r_offset[rds_count_r_sum[warp_id_glb - 1] - 1]; // you want to start from where previous contigs, last read ends.
 
-        if (rds_count_l_sum[warp_id_glb - 1] == 0)
-            loc_l_reads = reads_l;
-        else
-            loc_l_reads = reads_l + reads_l_offset[rds_count_l_sum[warp_id_glb - 1] - 1]; // you want to start from where previous contigs, last read ends.
-        
         if (rds_count_r_sum[warp_id_glb - 1] == 0)
             loc_r_quals = quals_r;
         else
             loc_r_quals = quals_r + reads_r_offset[rds_count_r_sum[warp_id_glb - 1] - 1]; // you want to start from where previous contigs, last read ends.
-
-        if (rds_count_l_sum[warp_id_glb - 1] == 0)
-            loc_l_quals = quals_l;
-        else
-            loc_l_quals = quals_l + reads_l_offset[rds_count_l_sum[warp_id_glb - 1] - 1]; // you want to start from where previous contigs, last read ends. 
-        
+       
         loc_mer_map = global_ht + prefix_ht[warp_id_glb - 1];
         ht_loc_size = prefix_ht[warp_id_glb] - prefix_ht[warp_id_glb - 1];
     }
 
-//data for contigs is mapped based on global thread ids (idx)
-// if( idx < tot_ctgs){
-//     if(idx == 0){
-//         loc_ctg.start_ptr = contigs;
-//         loc_ctg.length = ctg_offsets[idx];
-//         loc_bool_map = global_ht_bool + idx * max_walk_len;
-//         longest_walk_loc = longest_walks + idx * max_walk_len;
-//         loc_mer_walk_temp = mer_walk_temp + idx * (max_walk_len + max_mer_len_off);
-//     }else{
-//         loc_ctg.start_ptr = contigs + ctg_offsets[idx-1];
-//         loc_ctg.length = ctg_offsets[idx] - ctg_offsets[idx - 1];
-//         loc_bool_map = global_ht_bool + idx * max_walk_len;
-//         longest_walk_loc = longest_walks + idx * max_walk_len;
-//         loc_mer_walk_temp = mer_walk_temp + idx * (max_walk_len + max_mer_len_off);
-//     }
-// }
     max_ht_size = ht_loc_size;
     max_mer_len = min(max_mer_len, loc_ctg.length);
 
