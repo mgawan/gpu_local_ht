@@ -60,41 +60,22 @@ struct ExtCounts {
 //TODO: replacing numeric_limits by either a suitable constant/predefined value or find a device alternate, check if this is correct with Steve
   __device__
   void inc(char ext, int count) {
-  //  printf("******inc called******\n");
-    unsigned mask = 0;
-    int to_add = 0;
     switch (ext) {
       case 'A':
-        // mask = __activemask();
-        // count += count_A;
-        // __syncwarp(mask);
-        // to_add = (count < 65535) ? count : 65535;
-        // count_A = 0;
         atomicAdd(&count_A,count);
+        // count_A = (count_A > 65535) ? 65535 : count_A;
         break;
       case 'C':
-        // mask = __activemask();
-        // count += count_C;
-        // __syncwarp(mask);
-        // to_add = (count < 65535) ? count : 65535;
-        // count_C = 0;
         atomicAdd(&count_C,count);
+        // count_C = (count_C > 65535) ? 65535 : count_C;
         break;
       case 'G':
-        // mask = __activemask();
-        // count += count_G;
-        // __syncwarp(mask);
-        // to_add = (count < 65535) ? count : 65535;
-        // count_G = 0;
         atomicAdd(&count_G,count);
+        // count_G = (count_G > 65535) ? 65535 : count_G;
         break;
       case 'T':
-        // mask = __activemask();
-        // count += count_T;
-        // __syncwarp(mask);
-        // to_add = (count < 65535) ? count : 65535;
-        // count_T = 0;
         atomicAdd(&count_T,count);
+        // count_T = (count_T > 65535) ? 65535 : count_T;
         break;
     }
   }

@@ -44,11 +44,11 @@ int main (int argc, char* argv[]){
     overall_time.timer_start();
 
     std::vector<CtgWithReads> zero_slice, mid_slice, midsup_slice, outlier_slice;
-    uint32_t mid_l_max = 0, mid_r_max = 0, midsup_l_max = 0, midsup_r_max = 0, outlier_l_max = 0, outlier_r_max = 0, mid_max_contig_sz = 0, midsup_max_contig_sz = 0;
-    uint32_t outliers_max_contig_sz = 0, mids_tot_r_reads = 0, mids_tot_l_reads = 0, midsup_tot_r_reads = 0, midsup_tot_l_reads = 0, outliers_tot_r_reads = 0;
+    uint32_t mid_l_max = 0, mid_r_max = 0, outlier_l_max = 0, outlier_r_max = 0, mid_max_contig_sz = 0;
+    uint32_t outliers_max_contig_sz = 0, mids_tot_r_reads = 0, mids_tot_l_reads = 0, outliers_tot_r_reads = 0;
     uint32_t outliers_tot_l_reads = 0;
    // std::vector<uint32_t> ht_size_mid, ht_size_midsup, ht_size_outliers;
-    accum_data sizes_mid, sizes_midsup, sizes_outliers;
+    accum_data sizes_mid, sizes_outliers;
 
     for(int i = 0; i < data_in.size(); i++){
         CtgWithReads temp_in = data_in[i];
@@ -314,7 +314,6 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
     timer loop_time;
     loop_time.timer_start();
     double data_mv_tim = 0;
-    double kernel_tim = 0;
     double packing_tim = 0;
     slice_size = tot_extensions/iterations;
     for(int slice = 0; slice < iterations; slice++){
@@ -332,8 +331,6 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
     
 
         print_vals("Starting Data Packing");
-
-        int slice_l_max = 0, slice_r_max = 0;
         uint32_t ctgs_offset_sum = 0;
         uint32_t prefix_ht_sum = 0;
         uint32_t reads_r_offset_sum = 0;
@@ -412,7 +409,7 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
         
 
         print_vals("Calling Kernel with blocks:", blocks, "Threads:", thread_per_blk);
-        int64_t sum_ext, num_walks;
+        int64_t sum_ext=0, num_walks=0;
         uint32_t qual_offset = 33;
         iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_right_d, quals_right_d, reads_r_offset_d, rds_r_cnt_offset_d, 
         depth_d, d_ht, prefix_ht_size_d, d_ht_bool, max_mer_len, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, qual_offset, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);

@@ -467,20 +467,19 @@ double* ctg_depth, loc_ht* global_ht,  uint32_t* prefix_ht, loc_ht_bool* global_
 int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_offset, char* longest_walks, char* mer_walk_temp, uint32_t* final_walk_lens, int tot_ctgs)
 {
     const long int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    const long int warp_id_blk = threadIdx.x/32;
     const long int warp_id_glb = idx/32;
     const long int lane_id = threadIdx.x%32;
     if(warp_id_glb < tot_ctgs){ // so that no out of bound accesses 
     cstr_type loc_ctg;
     char *loc_r_reads, *loc_r_quals;
-    uint32_t r_rds_cnt, loc_rds_r_offset;
-    loc_ht* loc_mer_map;// = global_ht + idx * max_read_size * max_read_count;
+    uint32_t r_rds_cnt;
+    loc_ht* loc_mer_map;
     uint32_t ht_loc_size;
-    loc_ht_bool* loc_bool_map;// = global_ht_bool + idx * max_walk_len;
-    double loc_ctg_depth;// = ctg_depth[idx];
+    loc_ht_bool* loc_bool_map;
+    double loc_ctg_depth;
     int64_t excess_reads;
-    uint32_t max_ht_size = 0;//max_read_size * max_read_count;
-    char* longest_walk_loc;// = longest_walks + idx * max_walk_len;
+    uint32_t max_ht_size = 0;
+    char* longest_walk_loc;
     char* loc_mer_walk_temp;
     #ifdef DEBUG_PRINT_GPU
     int test = 0;
@@ -578,16 +577,16 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
                 cstr_copy(longest_walk_thread, walk);
             }
             if (walk_res == 'X') {
-                atomicAdd(&term_counts[0], 1);
+               // atomicAdd(&term_counts[0], 1);
                 // walk reaches a dead-end, downshift, unless we were upshifting
                 if (shift == LASSM_SHIFT_SIZE) 
                     break;
                 shift = -LASSM_SHIFT_SIZE;
             }else {
-                if (walk_res == 'F') 
-                    atomicAdd(&term_counts[1], 1);
-                else 
-                    atomicAdd(&term_counts[2], 1);
+                //if (walk_res == 'F') 
+                   // atomicAdd(&term_counts[1], 1);
+                //else 
+                    //atomicAdd(&term_counts[2], 1);
                 // otherwise walk must end with a fork or repeat, so upshift
                 if (shift == -LASSM_SHIFT_SIZE){
                     #ifdef DEBUG_PRINT_GPU
