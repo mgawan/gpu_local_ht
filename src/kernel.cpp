@@ -563,12 +563,7 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
                print_mer(loc_ctg);
                }
             #endif
-        
-          //TODO: add a check if total number of reads exceeds a certain number/too large, skip that one, may be do this on cpu 
-          // to preserve memory on GPU
-          //TODO: need to reinitialize the hashtable after each kmer size is done
 
-       // if(r_rds_cnt != 0){    //commenting this out because the zero read counts are filtered out on cpu side
     if(warp_id_glb < tot_ctgs){ // all warps within this range can go in execute count mers, for walk_mers only the lane 0 of each warp does the work
             for(uint32_t k = lane_id; k < max_ht_size; k+=32){ // resetting hash table in parallel with warps
                 loc_mer_map[k].key.length = EMPTY;
@@ -594,10 +589,6 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
             }
             #endif
 
-            // for(uint32_t k = 0; k < max_walk_len; k++){ // resetting bool map for next go, TODO: can we use warps here?
-            //     loc_bool_map[k].key.length = EMPTY;
-            // }
-            //TODO: initalize hash table find a faster way of doing this
             char walk_res = walk_mers(loc_mer_map, loc_bool_map, max_ht_size, mer_len, loc_mer_walk, longest_walk_thread, walk, warp_id_glb, max_walk_len);
             #ifdef DEBUG_PRINT_GPU
             if(warp_id_glb == test){
@@ -633,19 +624,15 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
                     #endif
                     break;
                 }
-                //if(walk_res == 'R') // if the walk ends at repeat, then the walk with repeat may have been longest so reset longest walk to zero
-                  //  longest_walk_thread.length = 0;// TODO: DOUBLE CHECK WITH STEVE IF THIS IS CORRECT
                 shift = LASSM_SHIFT_SIZE;
             }
-                    // test if lane_id has exited, if so exit yourself
 
         }// lane id cond ended
         __syncwarp(FULL_MASK);
         unsigned mask = __activemask();
         unsigned active = mask & 1; // zero if lane 0 has returned
-        //printf("mask:%x, lande:%d, res:%d\n",mask, lane_id, active);
         if(active == 0)
-            break;
+            break; // return if lane 0 has returned
         shift = bcast_warp(shift);
         }//warp id cond end
 

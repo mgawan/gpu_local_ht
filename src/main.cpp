@@ -413,16 +413,13 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
 
         print_vals("Calling Kernel with blocks:", blocks, "Threads:", thread_per_blk);
         int64_t sum_ext, num_walks;
-        //timer kernel_time;
         uint32_t qual_offset = 33;
-        //kernel_time.timer_start();
-        //TODO: pass only the read that needs to be extended, change the related code inside the kernel as well.
         iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_right_d, quals_right_d, reads_r_offset_d, rds_r_cnt_offset_d, 
         depth_d, d_ht, prefix_ht_size_d, d_ht_bool, max_mer_len, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, qual_offset, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
 
        // CUDA_CHECK(cudaDeviceSynchronize());
 
-        //perform revcomp of contig sequences and launch kernel with left reads, TODO: move right and left reads data separately
+        //perform revcomp of contig sequences and launch kernel with left reads, 
         print_vals("revcomp-ing the contigs for next kernel");
        // timer rev_comp_;
        // rev_comp_.timer_start();
@@ -456,22 +453,13 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
         tim_temp.timer_start();
         CUDA_CHECK(cudaMemcpy(longest_walks_r_h + slice * max_walk_len * slice_size, longest_walks_d, sizeof(char) * vec_size * max_walk_len, cudaMemcpyDeviceToHost));
         CUDA_CHECK(cudaMemcpy(final_walk_lens_r_h + slice * slice_size, final_walk_lens_d, sizeof(int32_t) * vec_size, cudaMemcpyDeviceToHost)); 
-      //  rev_comp_.timer_end();
 
         //cpying rev comped ctgs to device on same memory as previous ctgs
-       // gpu_transfer.timer_start();
         CUDA_CHECK(cudaMemcpy(ctg_seqs_d, ctgs_seqs_rc_h, sizeof(char) * ctgs_offset_sum, cudaMemcpyHostToDevice));
         tim_temp.timer_end();
         data_mv_tim += tim_temp.get_total_time();
-       // gpu_transfer.timer_end();
-       // transfer_time += gpu_transfer.get_total_time();
-        // launching kernel by swapping right and left reads, TODO: make this correct
-        //kernel_time.timer_start();
         iterative_walks_kernel<<<blocks,thread_per_blk>>>(cid_d, ctg_seq_offsets_d, ctg_seqs_d, reads_left_d, quals_left_d, reads_l_offset_d, rds_l_cnt_offset_d, 
         depth_d, d_ht, prefix_ht_size_d, d_ht_bool, max_mer_len, max_mer_len, term_counts_d, num_walks, max_walk_len, sum_ext, max_read_size, max_read_count, qual_offset, longest_walks_d, mer_walk_temp_d, final_walk_lens_d, vec_size);
-        //CUDA_CHECK(cudaDeviceSynchronize());
-        //kernel_time.timer_end();
-       // double left_kernel_time = kernel_time.get_total_time();
         print_vals("Device to Host Transfer...", "Copying back left walks");
         
         tim_temp.timer_start();
@@ -506,8 +494,6 @@ print_vals("Total Packing Time:", packing_tim);
         ofile << data_in[j*slice_size + i].cid<<" "<<data_in[j*slice_size + i].seq<<std::endl;
     }
   }
-//   ofile.flush();
-//   ofile.close();
 
 
     mem_timer.timer_start();  
