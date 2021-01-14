@@ -11,7 +11,7 @@ __device__ int bcast_warp(int arg) {
         printf("Thread %d failed. with val:%d, arg:%d \n", threadIdx.x, value, arg);
     return value;
 }
-//TODO: all the hashtable entries need to be set to empty, figure that out
+
 __device__ void print_mer(cstr_type& mer){
     if(threadIdx.x%32 == 0){
     for(int i = 0; i < mer.length; i++){
@@ -29,8 +29,6 @@ __device__ void cstr_copy(cstr_type& str1, cstr_type& str2){
     str1.length = str2.length;
 }
 
-//TODO: make sure that the returned hash value is wthin the range of HT size
-//TODO: find a better hash func for strings
 __device__ unsigned hash_func(cstr_type key, uint32_t max_size){
     unsigned hash, i;
     for(hash = i = 0; i < key.length; ++i)
@@ -42,7 +40,6 @@ __device__ unsigned hash_func(cstr_type key, uint32_t max_size){
     hash += (hash << 3);
     hash ^= (hash >> 11);
     hash += (hash << 15);
-    //TODO: this way of limiting hash value is not good, try to find a better way
     return hash%max_size;//(hash & (HT_SIZE - 1));
 }
 #define MIX(h,k,m) { k *= m; k ^= k >> r; k *= m; h *= m; h ^= k; }
@@ -185,13 +182,11 @@ __device__ void ht_insert(loc_ht* thread_ht, cstr_type kmer_key, MerFreqs mer_va
         int if_empty = thread_ht[hash_val].key.length; // length is set to some unimaginable number to indicate if its empty
         if(if_empty == EMPTY){ //the case where there is a key but no val, will not happen
 
-           // printf("hash_val:%d, orig_hash:%d, attemp:%d\n",hash_val, orig_hash, count); // for debugging
             thread_ht[hash_val].key = kmer_key;
             thread_ht[hash_val].val = mer_val;
             return;
         }
         hash_val = (hash_val +1 ) % max_size;//(hash_val + 1) & (HT_SIZE-1);
-        //count++; //for debugging
 
     }
 }
@@ -237,7 +232,6 @@ loc_ht& ht_get(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
 
 }
 
-//TODO:use some OOP technique for implementing the bool table, may be inheritence?
 //overload for bool vals
 __device__ 
 loc_ht_bool& ht_get(loc_ht_bool* thread_ht, cstr_type kmer_key, uint32_t max_size){
@@ -288,13 +282,10 @@ loc_ht& ht_get_atomic(loc_ht* thread_ht, cstr_type kmer_key, uint32_t max_size){
             printf("*****end reached, hashtable full*****\n"); // for debugging
             printf("*****end reached, hashtable full*****\n");
             printf("*****end reached, hashtable full*****\n");
-           // return loc_ht(cstr_type(NULL,-1), MerFreqs());
         }
     }
 
 }
-//TODO: intialize the bool table in kernel main
-//TODO: check if we need longest walk in this function
 __device__ char walk_mers(loc_ht* thrd_loc_ht, loc_ht_bool* thrd_ht_bool, uint32_t max_ht_size, int& mer_len, cstr_type& mer_walk_temp, cstr_type& longest_walk, cstr_type& walk, const int idx, int max_walk_len){
     char walk_result = 'X';
     #ifdef DEBUG_PRINT_GPU
@@ -386,7 +377,6 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
         if(DEBUG_PRINT_GPU && idx == test)
             printf("read loop iter:%d, thread:%d, loop max:%d\n",i, threadIdx.x, r_rds_cnt);
         #endif
-        //TODO: pass idx here
         read.start_ptr = loc_r_reads + running_sum_len;
         qual.start_ptr = loc_r_quals + running_sum_len;
         if(i == 0){
@@ -434,14 +424,9 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
             continue;
         int num_mers = read.length - mer_len;
         for( int start = lane_id; start < num_mers; start+=32){
-            //TODO: on cpu side add a check that if a certain read contains 'N', that is not included, check this with steve, 
-            // because searching a single mer for an N is going to be too slow
+            //TODO: on cpu side add a check that if a certain read contains 'N', 
             cstr_type mer(read.start_ptr + start, mer_len);
             loc_ht &temp_Mer = ht_get_atomic(thrd_loc_ht, mer, max_ht_size);
-            // if(temp_Mer.key.length == EMPTY){
-            //     temp_Mer.key = mer;
-            //     temp_Mer.val = {.hi_q_exts = {0}, .low_q_exts = {0}, .ext = 0, .count = 0};
-            // }
             
             int ext_pos = start + mer_len;
           //  assert(ext_pos < (int)read.length); // TODO: verify that assert works on gpu, for now commenting it out and replacing with printf
@@ -458,14 +443,6 @@ uint32_t* rds_count_r_sum, double& loc_ctg_depth, int& mer_len, uint32_t& qual_o
         __syncwarp();
        running_sum_len += read.length; // right before the for loop ends, update the prev_len to offset next read correctly
     }
-
-    //setting extension by traversing the completed table
-    // TODO: think of a better way to do this
-    // for (int k = lane_id; k < max_ht_size; k+=32) {
-    //     if( thrd_loc_ht[k].key.length != EMPTY){
-    //         thrd_loc_ht[k].val.set_ext(loc_ctg_depth);
-    //     }
-    // }
     __syncwarp();
 
     // #ifdef DEBUG_PRINT_GPU
@@ -569,7 +546,7 @@ int64_t sum_ext, int32_t max_read_size, int32_t max_read_count, uint32_t qual_of
                 loc_mer_map[k].key.length = EMPTY;
             }
             count_mers(loc_mer_map, loc_r_reads, max_ht_size, loc_r_quals, reads_r_offset, r_rds_cnt, rds_count_r_sum, loc_ctg_depth, mer_len, qual_offset, excess_reads, warp_id_glb);//passing warp_id instead of idx now
-            for(uint32_t k = lane_id; k < max_walk_len; k+=32){ // resetting bool map for next go, TODO: can we use warps here?
+            for(uint32_t k = lane_id; k < max_walk_len; k+=32){ // resetting bool map for next go
                 loc_bool_map[k].key.length = EMPTY;
             }
         if(lane_id == 0){ // this phase is processed by single thread of a warp
