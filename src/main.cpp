@@ -30,15 +30,21 @@ struct accum_data{
     std::vector<uint32_t> ctg_sizes;
 };
 
-std::ofstream ofile("/global/homes/m/mgawan/loc_assem/gpu_local_ht/test-out.dat");
-void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len,int max_reads_count, accum_data& sizes_outliers);
 
-// sample cmd line: ./build/ht_loc ../locassm_data/localassm_extend_7-21.dat ./out_file <kmer_size>
+void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len,int max_reads_count, accum_data& sizes_outliers, std::ofstream& out_file_g);
+
+// sample cmd line: ./build/ht_loc ../locassm_data/localassm_extend_7-21.dat <kmer_size> ./out_file 
 int main (int argc, char* argv[]){
+    if(argc != 4){
+        std::cout << "argc:"<<argc<<std::endl;
+        std::cout<< "Usage:\n";
+        std::cout<< "./build/ht_loc ../locassm_data/localassm_extend_7-21.dat 21 ./out_file.dat"<<std::endl;
+        return 0;
+    }
 
     std::string in_file = argv[1];
-   // std::string out_file = argv[2];
     int max_mer_len = std::stoi(argv[2]);
+    std::ofstream ofile(argv[3]);
     std::vector<CtgWithReads> data_in;
     uint32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
     read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count);
@@ -49,7 +55,6 @@ int main (int argc, char* argv[]){
     uint32_t mid_l_max = 0, mid_r_max = 0, outlier_l_max = 0, outlier_r_max = 0, mid_max_contig_sz = 0;
     uint32_t outliers_max_contig_sz = 0, mids_tot_r_reads = 0, mids_tot_l_reads = 0, outliers_tot_r_reads = 0;
     uint32_t outliers_tot_l_reads = 0;
-   // std::vector<uint32_t> ht_size_mid, ht_size_midsup, ht_size_outliers;
     accum_data sizes_mid, sizes_outliers;
 
     for(int i = 0; i < data_in.size(); i++){
@@ -71,21 +76,7 @@ int main (int argc, char* argv[]){
                 mid_r_max = temp_in.reads_right.size();
             if(mid_max_contig_sz < temp_in.seq.size())
                 mid_max_contig_sz = temp_in.seq.size();
-        }
-        // else if(temp_in.max_reads > 10 && temp_in.max_reads < 100){
-        //     midsup_slice.push_back(temp_in);
-        //     uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
-        //     ht_size_midsup.push_back(temp_ht_size);
-        //     midsup_tot_r_reads += temp_in.reads_right.size();
-        //     midsup_tot_l_reads += temp_in.reads_left.size();
-        //     if(midsup_l_max < temp_in.reads_left.size())
-        //         midsup_l_max = temp_in.reads_left.size();
-        //     if(midsup_r_max < temp_in.reads_right.size())
-        //         midsup_r_max = temp_in.reads_right.size();
-        //     if(midsup_max_contig_sz < temp_in.seq.size())
-        //         midsup_max_contig_sz = temp_in.seq.size();
-        // }
-        else{
+        }else{
             outlier_slice.push_back(temp_in);
             uint32_t temp_ht_size = temp_in.max_reads * max_read_size;
             sizes_outliers.ht_sizes.push_back(temp_ht_size);
@@ -117,16 +108,10 @@ int main (int argc, char* argv[]){
      print_vals("mids calling",  "mids count:", mid_slice.size());
     
     int max_reads_count = 10;
-    call_kernel(mid_slice, mid_max_contig_sz, max_read_size, mid_r_max, mid_l_max, max_mer_len,max_reads_count, sizes_mid);
-    print_vals("midsup calling",  "mids count:", midsup_slice.size());
-    // max_reads_count = 100;
-    // call_kernel(midsup_slice, midsup_max_contig_sz, midsup_tot_r_reads, midsup_tot_l_reads, max_read_size, midsup_r_max, midsup_l_max, max_mer_len,max_reads_count, ht_size_midsup);
+    call_kernel(mid_slice, mid_max_contig_sz, max_read_size, mid_r_max, mid_l_max, max_mer_len,max_reads_count, sizes_mid, ofile);
 
     print_vals("outliers calling", "outliers count:", outlier_slice.size());
-    // max_reads_count = 239;
-  //  overall_time.timer_start();
-    call_kernel(outlier_slice, outliers_max_contig_sz, max_read_size, outlier_r_max, outlier_l_max, max_mer_len, max_reads_count, sizes_outliers);
-    //overall_time.timer_end();
+    call_kernel(outlier_slice, outliers_max_contig_sz, max_read_size, outlier_r_max, outlier_l_max, max_mer_len, max_reads_count, sizes_outliers, ofile);
     overall_time.timer_end();
     
     print_vals("Total Time including file write:", overall_time.get_total_time());
@@ -138,21 +123,13 @@ int main (int argc, char* argv[]){
 }
 
 
-void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len, int max_reads_count, accum_data& sizes_vecs)
+void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint32_t max_read_size, uint32_t max_r_count, uint32_t max_l_count, int mer_len, int max_reads_count, accum_data& sizes_vecs, std::ofstream& out_file_g)
 {
 
-    //std::string in_file = argv[1];
-    // std::string out_file = argv[2];
      int max_mer_len = LASSM_MAX_KMER_LEN;//mer_len;
-
-   // int32_t max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count;
-
-    //read_locassm_data(&data_in, in_file, max_ctg_size, total_r_reads, total_l_reads, max_read_size, max_r_count, max_l_count);
 
     unsigned tot_extensions = data_in.size();
     uint32_t max_read_count = max_r_count>max_l_count ? max_r_count : max_l_count;
-    // max_l_count = max_read_count;
-    // max_r_count = max_read_count;
     int insert_avg = 121;
     int insert_stddev = 246;
     int max_walk_len = insert_avg + 2 * insert_stddev;
@@ -264,7 +241,7 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
     print_vals("Device Mem requesting per slice (MB):", (double)gpu_mem_req/ (1024*1024));
     
     print_vals("**old lochash size:",sizeof(loc_ht)*(max_read_size*max_read_count)*slice_size, "new local hash:",sizeof(loc_ht) * max_ht);
-    print_vals("**boolhash ize:",sizeof(loc_ht_bool) * slice_size * max_walk_len);
+    print_vals("**boolhash size:",sizeof(loc_ht_bool) * slice_size * max_walk_len);
     print_vals("**max_read_count:", max_read_count);
     print_vals("max read l count:", max_l_count);
     print_vals("max read r count:", max_r_count);
@@ -312,7 +289,6 @@ void call_kernel(std::vector<CtgWithReads>& data_in, uint32_t max_ctg_size, uint
 //performs data packing on that slice on cpu memory
 //and then moves that data to allocated GPU memory
 //calls the kernels, revcomps, copy backs walks and
-//rinse repeats till all slices are done.
     timer loop_time;
     loop_time.timer_start();
     double data_mv_tim = 0;
@@ -478,7 +454,6 @@ print_vals("Total Packing Time:", packing_tim);
   for(int j = 0; j < iterations; j++){
     int loc_size = (j == iterations - 1) ? slice_size + loc_left_over : slice_size;
 
-    //TODO: a lot of multiplications in below loop can be optimized (within indices)
     for(int i = 0; i< loc_size; i++){
         if(final_walk_lens_l_h[j*slice_size + i] != 0){
             std::string left(longest_walks_l_h.get() + j*slice_size*max_walk_len + max_walk_len*i,final_walk_lens_l_h[j*slice_size + i]);
@@ -490,7 +465,7 @@ print_vals("Total Packing Time:", packing_tim);
             std::string right(longest_walks_r_h.get() + j*slice_size*max_walk_len + max_walk_len*i,final_walk_lens_r_h[j*slice_size + i]);
             data_in[j*slice_size + i].seq += right;
         }
-        ofile << data_in[j*slice_size + i].cid<<" "<<data_in[j*slice_size + i].seq<<std::endl;
+        out_file_g << data_in[j*slice_size + i].cid<<" "<<data_in[j*slice_size + i].seq<<std::endl;
     }
   }
 

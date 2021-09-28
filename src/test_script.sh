@@ -1,0 +1,33 @@
+#!/bin/bash
+
+#set -x
+make clean
+make
+rm sorted*
+
+file_21="localassm_extend_7-21.dat"
+file_33="localassm_extend_1-33.dat"
+file_55="localassm_extend_7-55.dat"
+file_77="localassm_extend_9-77.dat"
+kmer_sizes=(21 33 55 77)
+i=0
+kmer_size=${kmer_sizes[$i]}
+for curr_file in $file_21 $file_33 $file_55 $file_77
+do
+    echo "running test for $kmer_size"
+    ./build/ht_loc ../locassm_data/$curr_file $kmer_size ../test-out.dat 1> /dev/null
+    sort ../test-out.dat >> sorted_new
+    sort ../locassm_data/"res_$curr_file" >> sorted_res
+    difference=$(diff sorted_new sorted_res)
+
+    if [ -z "$difference" ];
+    then 
+        echo "Test for $kmer_size passed!"
+    else
+        echo "Test for $kmer_size failed!"
+    fi
+
+    ((i=i+1))
+
+    kmer_size=${kmer_sizes[$i]}
+done

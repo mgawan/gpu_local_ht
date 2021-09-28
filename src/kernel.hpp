@@ -57,7 +57,6 @@ struct ExtCounts {
     printf("count_A:%d, count_C:%d, count_G:%d, count_T:%d\n", count_A, count_C, count_G, count_T);
   }
 
-//TODO: replacing numeric_limits by either a suitable constant/predefined value or find a device alternate, check if this is correct with Steve
   __device__
   void inc(char ext, int count) {
     switch (ext) {
@@ -113,20 +112,7 @@ struct MerFreqs {
   char ext;
   // the count of the final extension
   int count;
-  //   __device__ MerFreqs(){
-  //   ext = 'o';
-  //   count = -1;
-  //   hi_q_exts.count_A = 0;
-  //   hi_q_exts.count_C = 0;
-  //   hi_q_exts.count_T = 0;
-  //   hi_q_exts.count_G = 0;
 
-  //   low_q_exts.count_A = 0;
-  //   low_q_exts.count_C = 0;
-  //   low_q_exts.count_T = 0;
-  //   low_q_exts.count_G = 0;
-  // }
-// MerBase was defined here previously, moving it out for simplicity but check on why it was here before?
     __device__
     bool comp_merbase(MerBase& elem1, MerBase& elem2){
         if(elem1.rating != elem2.rating)
