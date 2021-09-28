@@ -14,7 +14,7 @@ i=0
 kmer_size=${kmer_sizes[$i]}
 for curr_file in $file_21 $file_33 $file_55 $file_77
 do
-    echo "running test for $kmer_size"
+    echo "running test for Kmer size: $kmer_size"
     ./build/ht_loc ../locassm_data/$curr_file $kmer_size ../test-out.dat 1> /dev/null
     sort ../test-out.dat >> sorted_new
     sort ../locassm_data/"res_$curr_file" >> sorted_res
@@ -22,9 +22,9 @@ do
 
     if [ -z "$difference" ];
     then 
-        echo "Test for $kmer_size passed!"
+        echo "Test for Kmer size: $kmer_size PASSED!"
     else
-        echo "Test for $kmer_size failed!"
+        echo "Test for Kmer size: $kmer_size FAILED!"
     fi
 
     ((i=i+1))
